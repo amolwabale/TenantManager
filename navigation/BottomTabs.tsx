@@ -1,0 +1,68 @@
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Icon } from 'react-native-paper';
+
+import DashboardStack from './DashboardStack';
+import TenantStack from './TenantStack';
+import RoomsStack from './RoomsStack';
+import PaymentsStack from './PaymentsStack';
+import SettingsStack from './SettingsStack';
+
+const Tab = createBottomTabNavigator();
+
+export default function BottomTabs() {
+  return (
+    <Tab.Navigator screenOptions={{ headerShown: false }}>
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardStack}
+        options={{
+            tabBarLabel: 'Home',
+            tabBarIcon: ({ color, size }) => (
+            <Icon source="home" color={color} size={size} />
+            ),
+        }}
+    />
+
+      <Tab.Screen
+        name="Tenant"
+        component={TenantStack}
+        options={{
+          tabBarLabel: 'Tenants',
+          tabBarIcon: ({ color, size }) => (
+            <Icon source="account-group" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Rooms"
+        component={RoomsStack}
+        options={{
+          tabBarLabel: 'Rooms',
+          tabBarIcon: ({ color, size }) => (
+            <Icon source="home-city-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Payments"
+        component={PaymentsStack}
+        options={{
+          tabBarLabel: 'Payments',
+          tabBarIcon: ({ color, size }) => (
+            <Icon source="credit-card-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsStack}
+        options={{
+          tabBarLabel: 'Settings',
+          tabBarIcon: ({ color, size }) => (
+            <Icon source="cog-outline" color={color} size={size} />
+          ),
+        }}
+      />
+    </Tab.Navigator>
+  );
+}

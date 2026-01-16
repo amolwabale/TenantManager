@@ -25,6 +25,7 @@ DerivedData
 # Android/IntelliJ
 #
 build/
+android/app/build/
 .idea
 .gradle
 local.properties
@@ -55,6 +56,11 @@ yarn-error.log
 
 # Bundle artifact
 *.jsbundle
+
+# React Native build outputs
+ios/build/
+*.log
+.env*
 
 # Ruby / CocoaPods
 **/Pods/
