@@ -11,6 +11,9 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { StackParamList } from '../../navigation/StackParam';
+import { RegisterUser } from '../../service/IdentityService';
+import { RegisterPayload } from '../../model/Register';
+
 
 export default function RegisterScreen() {
   const theme = useTheme();
@@ -26,7 +29,7 @@ export default function RegisterScreen() {
   const [address, setAddress] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
-
+  const [loading, setLoading] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
   const validate = () => {
@@ -63,18 +66,31 @@ export default function RegisterScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!validate()) return;
 
-    Alert.alert(
-      'Registration Successful',
-      `First Name: ${firstName}
-Last Name: ${lastName}
-Email: ${email}
-Mobile: ${mobile}
-Address: ${address || 'N/A'}
-Password: ${password}`
-    );
+    setLoading(true);
+
+    try {
+      await RegisterUser({
+        firstName,
+        lastName,
+        email,
+        password,
+        mobile,
+        address,
+      });
+
+      Alert.alert(
+        'Registration Successful',
+        'Your account has been created successfully. Please login.',
+        [{ text: 'OK', onPress: handleBack }]
+      );
+    } catch (err: any) {
+      Alert.alert('Registration Failed', err.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -204,23 +220,27 @@ Password: ${password}`
           {errors.confirmPassword}
         </HelperText>
 
-      <View style={styles.buttonRow}>
-        <Button
+        <View style={styles.buttonRow}>
+          <Button
             mode="outlined"
             onPress={handleBack}
             style={styles.secondaryButton}
-            contentStyle={styles.buttonContent}>
+            contentStyle={styles.buttonContent}
+            disabled={loading}
+          >
             Back
-        </Button>
-        <Button
+          </Button>
+          <Button
             mode="contained"
             onPress={handleRegister}
+            loading={loading}
+            disabled={loading}
             style={styles.primaryButton}
             contentStyle={styles.buttonContent}
-        >
+          >
             Register
-        </Button>
-    </View>
+          </Button>
+        </View>
       </Surface>
     </ScrollView>
   );
