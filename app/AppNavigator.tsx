@@ -1,13 +1,13 @@
 import { NavigationContainer } from '@react-navigation/native';
-import BottomTabs from '../navigation/BottomTabs';
+import BottomTabs from '../navigation/MainTabs';
 import RegisterScreen from '../screen/Identity/RegisterScreen';
 import LoginScreen from '../screen/Identity/AuthScreen';
-import IdentityStack from '../navigation/IdentityStack';
+import AuthStack from '../navigation/AuthStack';
 
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <IdentityStack />
+      <AuthStack />
     </NavigationContainer>
   );
 }

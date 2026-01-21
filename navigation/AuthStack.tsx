@@ -8,7 +8,7 @@ import LoginScreen from '../screen/Identity/LoginScreen';
 const Stack = createNativeStackNavigator();
   
 
-export default function IdentityStack() {
+export default function AuthStack() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="AuthScreen" component={AuthScreen} />

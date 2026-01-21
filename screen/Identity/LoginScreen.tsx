@@ -1,4 +1,4 @@
-import { NavigationProp, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import * as React from 'react';
 import { View, StyleSheet, Alert, ScrollView } from 'react-native';
 import {
@@ -8,17 +8,23 @@ import {
   TextInput,
   HelperText,
   useTheme,
+  ActivityIndicator,
 } from 'react-native-paper';
-import { StackParamList } from '../../navigation/StackParam';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { StackParamList } from '../../navigation/StackParam';
+import { Login } from '../../service/IdentityService';
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const navigation = useNavigation<NativeStackNavigationProp<StackParamList, 'AuthScreen'>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<StackParamList, 
+    'AuthScreen',
+    'BottomTabs'>>();
+
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
-
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [loading, setLoading] = React.useState(false);
 
   const handleBack = () => {
     navigation.navigate('AuthScreen');
@@ -41,14 +47,28 @@ export default function LoginScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!validate()) return;
 
-    Alert.alert(
-      'Login Successful',
-      `Email: ${email}
-Password: ${password}`
-    );
+    try {
+      setLoading(true);
+
+      const result = await Login(email, password);
+      const user = result.data?.user;
+      const error = result.error;
+      Alert.alert(
+        'Login Successful',
+        `Welcome ${user?.email}`
+      );
+
+      //TODO
+      // navigation.navigate('BottomTabs');
+
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -103,26 +123,36 @@ Password: ${password}`
         </View>
 
         <View style={styles.buttonRow}>
-        <Button
+          <Button
             mode="outlined"
             onPress={handleBack}
             style={styles.secondaryButton}
-            contentStyle={styles.buttonContent}>
+            contentStyle={styles.buttonContent}
+            disabled={loading}
+          >
             Back
-        </Button>
-        <Button
+          </Button>
+
+          <Button
             mode="contained"
             onPress={handleLogin}
             style={styles.primaryButton}
             contentStyle={styles.buttonContent}
-        >
+            loading={loading}
+            disabled={loading}
+          >
             Login
-        </Button>
-</View>
+          </Button>
+        </View>
+
+        {loading && (
+          <ActivityIndicator style={{ marginTop: 16 }} />
+        )}
       </Surface>
     </ScrollView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {

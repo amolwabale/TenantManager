@@ -1,23 +1,12 @@
 import Config from "react-native-config";
 import { RegisterPayload, RegisterResponse } from "../model/Register";
-
-
-
-
-// export const ENV = {
-//   API_BASE_URL: Config.API_BASE_URL,
-// };
-
-// const API_BASE_URL = ENV.API_BASE_URL;
-// if (!API_BASE_URL) {
-//   throw new Error("SUPABASE_URL is not defined");
-// }
+import supabase from "../service/SupabaseClient";
 
 export const RegisterUser = async (
   payload: RegisterPayload
 ): Promise<RegisterResponse> => {
   const response = await fetch(
-    `https://crhxcncjzfsmxlsxdnux.supabase.co/functions/v1/authentication/register`,
+    `https://sample.com/register`,
     {
       method: "POST",
       headers: {
@@ -35,3 +24,13 @@ export const RegisterUser = async (
 
   return result;
 };
+
+
+export async function Login(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  return { data, error } ;
+}

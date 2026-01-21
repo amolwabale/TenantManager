@@ -9,7 +9,7 @@ import SettingsStack from './SettingsStack';
 
 const Tab = createBottomTabNavigator();
 
-export default function BottomTabs() {
+export default function MainTabs() {
   return (
     <Tab.Navigator screenOptions={{ headerShown: false }}>
       <Tab.Screen
