@@ -1,12 +1,15 @@
 import Config from "react-native-config";
 import { RegisterPayload, RegisterResponse } from "../model/Register";
 import supabase from "../service/SupabaseClient";
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = Config.SUPABASE_URL;
 
 export const RegisterUser = async (
   payload: RegisterPayload
 ): Promise<RegisterResponse> => {
   const response = await fetch(
-    `https://sample.com/register`,
+    `${SUPABASE_URL}/functions/v1/tenant-manager/register`,
     {
       method: "POST",
       headers: {
