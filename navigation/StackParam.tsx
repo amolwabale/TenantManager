@@ -1,6 +1,10 @@
-export type StackParamList = {
-    LoginScreen: undefined;
-    RegisterScreen: undefined;
-    AuthScreen: undefined;
-  };
-  
+export type AuthStackParamList = {
+  AuthScreen: undefined;
+  LoginScreen: undefined;
+  RegisterScreen: undefined;
+};
+
+export type RootStackParamList = {
+  AuthStack: undefined;
+  MainTabs: undefined;
+};

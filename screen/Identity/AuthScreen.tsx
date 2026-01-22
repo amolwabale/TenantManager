@@ -3,10 +3,10 @@ import { View, StyleSheet, Alert } from 'react-native';
 import { Button, Text, Surface, useTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { StackParamList } from '../../navigation/StackParam';
+import { AuthStackParamList } from '../../navigation/StackParam';
 
 type NavigationProp = NativeStackNavigationProp<
-  StackParamList,
+  AuthStackParamList,
   'RegisterScreen',
   'LoginScreen'
 >;

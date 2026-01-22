@@ -10,14 +10,14 @@ import {
   HelperText,
   useTheme,
 } from 'react-native-paper';
-import { StackParamList } from '../../navigation/StackParam';
+import { AuthStackParamList } from '../../navigation/StackParam';
 import { RegisterUser } from '../../service/IdentityService';
 import { RegisterPayload } from '../../model/Register';
 
 
 export default function RegisterScreen() {
   const theme = useTheme();
-  const navigation = useNavigation<NativeStackNavigationProp<StackParamList, 'AuthScreen'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList, 'AuthScreen'>>();
   const handleBack = () => {
     navigation.navigate('AuthScreen');
   };

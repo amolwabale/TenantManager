@@ -1,4 +1,4 @@
-import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
 import * as React from 'react';
 import { View, StyleSheet, Alert, ScrollView } from 'react-native';
 import {
@@ -11,15 +11,15 @@ import {
   ActivityIndicator,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { StackParamList } from '../../navigation/StackParam';
+import { AuthStackParamList, RootStackParamList } from '../../navigation/StackParam';
 import { Login } from '../../service/IdentityService';
+
+type AuthNav = NativeStackNavigationProp<AuthStackParamList, 'LoginScreen'>;
+type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const navigation =
-    useNavigation<NativeStackNavigationProp<StackParamList, 
-    'AuthScreen',
-    'BottomTabs'>>();
+  const navigation = useNavigation<CompositeNavigationProp<AuthNav, RootNav>>();
 
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -52,17 +52,15 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-
       const result = await Login(email, password);
       const user = result.data?.user;
-      const error = result.error;
-      Alert.alert(
-        'Login Successful',
-        `Welcome ${user?.email}`
-      );
 
-      //TODO
-      // navigation.navigate('BottomTabs');
+      if (!user || result.error) {
+        Alert.alert('Invalid email or password');
+        return;
+      };
+
+      navigation.replace('MainTabs');
 
     } catch (error: any) {
       Alert.alert('Login Failed', error.message);
@@ -138,7 +136,6 @@ export default function LoginScreen() {
             onPress={handleLogin}
             style={styles.primaryButton}
             contentStyle={styles.buttonContent}
-            loading={loading}
             disabled={loading}
           >
             Login
