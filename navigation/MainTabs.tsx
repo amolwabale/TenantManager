@@ -11,7 +11,9 @@ const Tab = createBottomTabNavigator();
 
 export default function MainTabs() {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false }}>
+    <Tab.Navigator screenOptions={{ headerShown: false,
+      tabBarStyle: { paddingTop: 8, paddingBottom: 10, height: 78 }
+     }}>
       <Tab.Screen
         name="Dashboard"
         component={DashboardStack}
