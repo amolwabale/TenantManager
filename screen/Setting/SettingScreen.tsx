@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Button,
@@ -10,14 +10,19 @@ import {
   TextInput,
   useTheme,
 } from 'react-native-paper';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import supabase from '../../service/SupabaseClient';
+import { RootStackParamList } from '../../navigation/StackParam';
 
 type Errors = Partial<
   Record<'propertyName' | 'propertyAddress' | 'water' | 'electricity', string>
 >;
 
+type RootNav = NativeStackNavigationProp<RootStackParamList>;
+
 export default function SettingScreen() {
   const theme = useTheme();
+  const navigation = useNavigation<RootNav>();
 
   /* ---------------- FORM STATE ---------------- */
 
@@ -167,6 +172,29 @@ export default function SettingScreen() {
     }
   };
 
+  /* ---------------- LOGOUT ---------------- */
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase.auth.signOut();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'AuthStack' }],
+            });
+          },
+        },
+      ],
+    );
+  };
+
   /* ---------------- LOADER ---------------- */
 
   if (initialLoading) {
@@ -181,6 +209,7 @@ export default function SettingScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* PROPERTY SETTINGS CARD */}
       <Surface style={styles.card} elevation={4}>
         <Text
           variant="headlineMedium"
@@ -231,6 +260,22 @@ export default function SettingScreen() {
           Save
         </Button>
       </Surface>
+
+      {/* ACCOUNT / LOGOUT CARD */}
+      <Surface style={styles.dangerCard} elevation={2}>
+        <Text variant="titleMedium" style={styles.dangerTitle}>
+          Account
+        </Text>
+
+        <Button
+          mode="outlined"
+          textColor="#D32F2F"
+          style={styles.logoutButton}
+          onPress={handleLogout}
+        >
+          Logout
+        </Button>
+      </Surface>
     </ScrollView>
   );
 }
@@ -274,20 +319,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   card: {
     padding: 16,
     borderRadius: 12,
+    marginBottom: 16,
   },
+  dangerCard: {
+    padding: 16,
+    borderRadius: 12,
+  },
+
   title: {
     marginBottom: 12,
     fontWeight: '600',
     textAlign: 'center',
   },
+  dangerTitle: {
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+
   field: {
     marginBottom: 12,
   },
+
   primaryButton: {
     marginTop: 8,
+  },
+  logoutButton: {
+    borderColor: '#D32F2F',
   },
   buttonContent: {
     paddingVertical: 6,
