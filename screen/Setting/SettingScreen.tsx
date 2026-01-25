@@ -3,6 +3,7 @@ import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import {
   ActivityIndicator,
+  Avatar,
   Button,
   HelperText,
   Surface,
@@ -72,12 +73,6 @@ export default function SettingScreen() {
         setElectricity(
           data.electricity_unit != null ? String(data.electricity_unit) : '',
         );
-      } else {
-        setRecordId(null);
-        setPropertyName('');
-        setPropertyAddress('');
-        setWater('');
-        setElectricity('');
       }
     } catch (err: any) {
       Alert.alert('Load Failed', err.message || 'Could not load settings');
@@ -195,8 +190,6 @@ export default function SettingScreen() {
     );
   };
 
-  /* ---------------- LOADER ---------------- */
-
   if (initialLoading) {
     return (
       <View style={styles.loader}>
@@ -205,18 +198,24 @@ export default function SettingScreen() {
     );
   }
 
-  /* ---------------- UI ---------------- */
-
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* PROPERTY SETTINGS CARD */}
-      <Surface style={styles.card} elevation={4}>
-        <Text
-          variant="headlineMedium"
-          style={[styles.title, { color: theme.colors.primary }]}
-        >
-          Property Settings
-        </Text>
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      {/* ---------- HERO ---------- */}
+      <Surface style={styles.hero} elevation={3}>
+        <Avatar.Icon size={56} icon="office-building-outline" />
+        <View style={{ marginLeft: 16 }}>
+          <Text variant="titleLarge" style={styles.heroTitle}>
+            Property Settings
+          </Text>
+          <Text style={styles.heroSubtitle}>
+            Manage your property configuration
+          </Text>
+        </View>
+      </Surface>
+
+      {/* ---------- PROPERTY ---------- */}
+      <Surface style={styles.section} elevation={2}>
+        <SectionTitle title="Property Details" />
 
         <Field
           label="Property Name *"
@@ -232,6 +231,11 @@ export default function SettingScreen() {
           onChange={setPropertyAddress}
           multiline
         />
+      </Surface>
+
+      {/* ---------- UTILITIES ---------- */}
+      <Surface style={styles.section} elevation={2}>
+        <SectionTitle title="Utility Charges" />
 
         <Field
           label="Water (numeric)"
@@ -255,17 +259,14 @@ export default function SettingScreen() {
           loading={saving}
           disabled={saving}
           style={styles.primaryButton}
-          contentStyle={styles.buttonContent}
         >
-          Save
+          Save Settings
         </Button>
       </Surface>
 
-      {/* ACCOUNT / LOGOUT CARD */}
-      <Surface style={styles.dangerCard} elevation={2}>
-        <Text variant="titleMedium" style={styles.dangerTitle}>
-          Account
-        </Text>
+      {/* ---------- ACCOUNT ---------- */}
+      <Surface style={styles.dangerSection} elevation={1}>
+        <SectionTitle title="Account" />
 
         <Button
           mode="outlined"
@@ -280,7 +281,13 @@ export default function SettingScreen() {
   );
 }
 
-/* ---------------- FIELD COMPONENT ---------------- */
+/* ---------------- HELPERS ---------------- */
+
+const SectionTitle = ({ title }: { title: string }) => (
+  <Text variant="titleMedium" style={styles.sectionTitle}>
+    {title}
+  </Text>
+);
 
 const Field = ({
   label,
@@ -309,33 +316,41 @@ const Field = ({
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  container: {
+  scroll: {
+    flex: 1,
+    backgroundColor: '#F4F6FA',
+  },
+  scrollContent: {
     flexGrow: 1,
     padding: 16,
-    backgroundColor: '#f5f5f5',
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingBottom: 40,
   },
 
-  card: {
+  hero: {
+    borderRadius: 18,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  heroTitle: {
+    fontWeight: '700',
+  },
+  heroSubtitle: {
+    color: '#666',
+    marginTop: 4,
+  },
+
+  section: {
+    borderRadius: 16,
     padding: 16,
-    borderRadius: 12,
     marginBottom: 16,
   },
-  dangerCard: {
+  dangerSection: {
+    borderRadius: 16,
     padding: 16,
-    borderRadius: 12,
   },
-
-  title: {
-    marginBottom: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  dangerTitle: {
+  sectionTitle: {
     fontWeight: '600',
     marginBottom: 12,
   },
@@ -350,7 +365,10 @@ const styles = StyleSheet.create({
   logoutButton: {
     borderColor: '#D32F2F',
   },
-  buttonContent: {
-    paddingVertical: 6,
+
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
