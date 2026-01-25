@@ -3,7 +3,7 @@ import { Icon } from 'react-native-paper';
 
 import DashboardStack from './DashboardStack';
 import TenantStack from './TenantStack';
-import RoomsStack from './RoomsStack';
+import { RoomStack } from './RoomStack';  
 import PaymentsStack from './PaymentsStack';
 import SettingsStack from './SettingsStack';
 
@@ -37,7 +37,7 @@ export default function MainTabs() {
       />
       <Tab.Screen
         name="Rooms"
-        component={RoomsStack}
+        component={RoomStack}
         options={{
           tabBarLabel: 'Rooms',
           tabBarIcon: ({ color, size }) => (

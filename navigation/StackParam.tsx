@@ -14,3 +14,9 @@ export type TenantStackParamList = {
   TenantView: { tenantId: number };
   TenantForm: { tenantId?: number; mode: 'add' | 'edit' };
 };
+
+export type RoomStackParamList = {
+  RoomList: undefined;
+  RoomView: { roomId: number; };
+  RoomForm: { mode: 'add' | 'edit'; roomId?: number };
+};
