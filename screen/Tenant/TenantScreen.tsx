@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import React from 'react';
-import { Alert, FlatList, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import {
   ActivityIndicator,
   Avatar,
@@ -9,16 +9,14 @@ import {
   IconButton,
   Surface,
   Text,
-  useTheme,
 } from 'react-native-paper';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { TenantStackParamList } from '../../navigation/StackParam';
 import { deleteTenant, fetchTenants, TenantRecord } from '../../service/tenantService';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type Nav = NativeStackNavigationProp<TenantStackParamList, 'TenantList'>;
 
 export default function TenantScreen() {
-  const theme = useTheme();
   const navigation = useNavigation<Nav>();
   const [loading, setLoading] = React.useState(false);
   const [tenants, setTenants] = React.useState<TenantRecord[]>([]);
@@ -74,8 +72,8 @@ export default function TenantScreen() {
   return (
     <View style={styles.container}>
       {loading && tenants.length === 0 ? (
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator />
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" />
         </View>
       ) : tenants.length === 0 ? (
         <EmptyState onAdd={() => navigation.navigate('TenantForm', { mode: 'add' })} />
@@ -92,13 +90,14 @@ export default function TenantScreen() {
 
       <FAB
         icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        color="white"
+        style={styles.fab}
         onPress={() => navigation.navigate('TenantForm', { mode: 'add' })}
       />
     </View>
   );
 }
+
+/* ---------------- CARD ---------------- */
 
 const TenantCard = ({
   item,
@@ -112,77 +111,128 @@ const TenantCard = ({
   onDelete: () => void;
 }) => {
   const photo = (item as any).profile_photo_url as string | undefined;
+
   return (
-    <Surface style={styles.card} elevation={2}>
-      <View style={styles.cardRow}>
-        <AvatarDisplay uri={photo} size={48} />
-        <View style={styles.cardBody}>
-          <Text variant="titleMedium" style={styles.cardTitle} onPress={onPress}>
-            {item.name || '-'}
-          </Text>
-          <Text variant="bodyMedium" style={styles.cardSubtitle} onPress={onPress}>
-            {item.mobile || '-'}
-          </Text>
-          <Text variant="bodySmall" style={styles.cardCaption} onPress={onPress}>
-            Family: {item.total_family_members || '-'}
-          </Text>
+    <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
+      <Surface style={styles.card} elevation={2}>
+        <View style={styles.cardRow}>
+          <AvatarDisplay uri={photo} size={48} />
+
+          <View style={styles.cardBody}>
+            <Text variant="titleMedium" style={styles.cardTitle}>
+              {item.name || '-'}
+            </Text>
+            <Text style={styles.cardSubtitle}>{item.mobile || '-'}</Text>
+            <Text style={styles.cardCaption}>
+              Family Members: {item.total_family_members || '-'}
+            </Text>
+          </View>
+
+          <View style={styles.actions}>
+            <IconButton icon="pencil" size={18} onPress={onEdit} />
+            <IconButton icon="delete" size={18} onPress={onDelete} />
+          </View>
         </View>
-        <View style={styles.actions}>
-          <IconButton icon="pencil" size={18} onPress={onEdit} />
-          <IconButton icon="delete" size={18} onPress={onDelete} />
-        </View>
-      </View>
-    </Surface>
+      </Surface>
+    </TouchableOpacity>
   );
 };
 
-const AvatarDisplay = ({ uri, size }: { uri?: string; size: number }) => {
-  if (uri) {
-    return <Avatar.Image size={size} source={{ uri }} style={styles.avatar} />;
-  }
-  return <Avatar.Icon size={size} icon="account" style={styles.avatar} />;
-};
+const AvatarDisplay = ({ uri, size }: { uri?: string; size: number }) =>
+  uri ? (
+    <Avatar.Image size={size} source={{ uri }} />
+  ) : (
+    <Avatar.Icon size={size} icon="account" />
+  );
+
+/* ---------------- EMPTY STATE ---------------- */
 
 const EmptyState = ({ onAdd }: { onAdd: () => void }) => (
   <View style={styles.emptyState}>
+    <Avatar.Icon size={72} icon="account-group" style={styles.emptyIcon} />
     <Text variant="titleMedium" style={styles.emptyTitle}>
-      No tenants added yet
+      No tenants yet
     </Text>
-    <Text style={styles.emptySubtitle}>Start by adding your first tenant.</Text>
-    <Button mode="contained" onPress={onAdd} style={styles.emptyButton}>
+    <Text style={styles.emptySubtitle}>
+      Add tenants to manage profiles, documents, and billing.
+    </Text>
+    <Button mode="contained" onPress={onAdd}>
       Add Tenant
     </Button>
   </View>
 );
 
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  listContent: { padding: 12, paddingBottom: 96 },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: {
+    flex: 1,
+    backgroundColor: '#F4F6FA',
+  },
+
+  listContent: {
+    padding: 16,
+    paddingBottom: 120,
+  },
+
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
   card: {
-    padding: 12,
-    borderRadius: 12,
+    borderRadius: 16,
+    padding: 14,
     marginBottom: 12,
   },
-  cardRow: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { marginRight: 12, backgroundColor: '#eee' },
-  cardBody: { flex: 1 },
-  cardTitle: { fontWeight: '600' },
-  cardSubtitle: { color: '#444' },
-  cardCaption: { color: '#666' },
-  actions: { flexDirection: 'row' },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardBody: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  cardTitle: {
+    fontWeight: '600',
+  },
+  cardSubtitle: {
+    color: '#555',
+    marginTop: 2,
+  },
+  cardCaption: {
+    color: '#777',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  actions: {
+    flexDirection: 'row',
+  },
+
   fab: {
     position: 'absolute',
     right: 16,
     bottom: 24,
   },
+
   emptyState: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 24,
   },
-  emptyTitle: { marginBottom: 8, fontWeight: '600' },
-  emptySubtitle: { marginBottom: 16, color: '#666' },
-  emptyButton: {},
+  emptyIcon: {
+    marginBottom: 16,
+    backgroundColor: '#E0E0E0',
+  },
+  emptyTitle: {
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
 });

@@ -2,7 +2,15 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Avatar, Button, IconButton, Surface, Text } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Avatar,
+  Button,
+  FAB,
+  IconButton,
+  Surface,
+  Text,
+} from 'react-native-paper';
 import { TenantStackParamList } from '../../navigation/StackParam';
 import { fetchTenantById, TenantRecord } from '../../service/tenantService';
 
@@ -21,12 +29,16 @@ export default function TenantViewScreen() {
       setLoading(true);
       const data = await fetchTenantById(tenantId);
       if (!data) {
-        Alert.alert('Not found', 'Tenant could not be loaded', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        Alert.alert('Not found', 'Tenant could not be loaded', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
         return;
       }
       setTenant(data);
     } catch (err: any) {
-      Alert.alert('Load Failed', err.message || 'Could not load tenant', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      Alert.alert('Load Failed', err.message || 'Could not load tenant', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -40,11 +52,9 @@ export default function TenantViewScreen() {
 
   if (loading || !tenant) {
     return (
-      
-        <View style={styles.loaderContainer}>
-          <ActivityIndicator />
-        </View>
-      
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" />
+      </View>
     );
   }
 
@@ -54,102 +64,215 @@ export default function TenantViewScreen() {
   };
 
   return (
-    
+    <>
       <ScrollView contentContainerStyle={styles.container}>
-        <Surface style={styles.card} elevation={4}>
-          <View style={styles.headerRow}>
-            <Text variant="headlineMedium" style={styles.title}>
-              Tenant Details
+        {/* HERO */}
+        <Surface style={styles.hero} elevation={2}>
+          <AvatarDisplay
+            uri={(tenant as any).profile_photo_url as string | undefined}
+            size={88}
+          />
+          <View style={styles.heroText}>
+            <Text variant="titleLarge" style={styles.tenantName}>
+              {tenant.name}
             </Text>
-            <IconButton icon="pencil" onPress={() => navigation.navigate('TenantForm', { mode: 'edit', tenantId })} />
+            <Text style={styles.subText}>{tenant.mobile}</Text>
           </View>
-
-          <View style={styles.avatarRow}>
-            <AvatarDisplay uri={(tenant as any).profile_photo_url as string | undefined} size={88} />
-          </View>
-
-          <InfoRow label="Full Name" value={tenant.name} />
-          <InfoRow label="Mobile" value={tenant.mobile} />
-          <InfoRow label="Alternate Mobile" value={tenant.alternate_mobile} />
-          <InfoRow label="Total Family Members" value={tenant.total_family_members} />
-          <InfoRow label="Address" value={tenant.address} />
-          <InfoRow label="Company Name" value={tenant.company_name} />
-
-          <DocRow label="Aadhaar" url={tenant.adhar_card_url} onPress={() => openLink(tenant.adhar_card_url)} />
-          <DocRow label="PAN" url={tenant.pan_card_url} onPress={() => openLink(tenant.pan_card_url)} />
-          <DocRow label="Agreement" url={tenant.agreement_url} onPress={() => openLink(tenant.agreement_url)} />
         </Surface>
+
+        {/* PERSONAL INFO */}
+        <Section title="Personal Information">
+          <InfoRow icon="phone" label="Mobile" value={tenant.mobile} />
+          <InfoRow icon="phone-plus" label="Alternate Mobile" value={tenant.alternate_mobile} />
+          <InfoRow
+            icon="account-group"
+            label="Family Members"
+            value={tenant.total_family_members}
+          />
+        </Section>
+
+        {/* ADDRESS */}
+        <Section title="Address & Work">
+          <InfoRow icon="map-marker" label="Address" value={tenant.address} />
+          <InfoRow icon="office-building" label="Company" value={tenant.company_name} />
+        </Section>
+
+        {/* DOCUMENTS */}
+        <Section title="Documents">
+          <View style={styles.docGrid}>
+            <DocTile
+              icon="card-account-details"
+              label="Aadhaar"
+              url={tenant.adhar_card_url}
+              onPress={() => openLink(tenant.adhar_card_url)}
+            />
+            <DocTile
+              icon="card-bulleted"
+              label="PAN"
+              url={tenant.pan_card_url}
+              onPress={() => openLink(tenant.pan_card_url)}
+            />
+            <DocTile
+              icon="file-document"
+              label="Agreement"
+              url={tenant.agreement_url}
+              onPress={() => openLink(tenant.agreement_url)}
+            />
+          </View>
+        </Section>
       </ScrollView>
+
+      {/* FLOATING EDIT */}
+      <FAB
+        icon="pencil"
+        style={styles.fab}
+        onPress={() =>
+          navigation.navigate('TenantForm', { mode: 'edit', tenantId })
+        }
+      />
+    </>
   );
 }
 
-const InfoRow = ({ label, value }: { label: string; value?: string | null }) => (
+/* ---------------- UI COMPONENTS ---------------- */
+
+const Section = ({ title, children }: any) => (
+  <Surface style={styles.section} elevation={2}>
+    <Text variant="titleMedium" style={styles.sectionTitle}>
+      {title}
+    </Text>
+    {children}
+  </Surface>
+);
+
+const InfoRow = ({
+  icon,
+  label,
+  value,
+}: {
+  icon: string;
+  label: string;
+  value?: string | number | null;
+}) => (
   <View style={styles.infoRow}>
-    <Text style={styles.infoLabel}>{label}</Text>
-    <Text style={styles.infoValue}>{value || '-'}</Text>
+    <IconButton icon={icon} size={18} />
+    <View>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value ?? '-'}</Text>
+    </View>
   </View>
 );
 
-const DocRow = ({ label, url, onPress }: { label: string; url?: string | null; onPress: () => void }) => (
-  <View style={styles.infoRow}>
-    <Text style={styles.infoLabel}>{label}</Text>
+const DocTile = ({
+  icon,
+  label,
+  url,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  url?: string | null;
+  onPress: () => void;
+}) => (
+  <Surface style={styles.docTile} elevation={1}>
+    <IconButton icon={icon} size={28} />
+    <Text style={styles.docLabel}>{label}</Text>
     {url ? (
-      <Button mode="text" onPress={onPress} compact>
+      <Button mode="text" onPress={onPress}>
         View
       </Button>
     ) : (
-      <Text style={styles.infoValue}>Not uploaded</Text>
+      <Text style={styles.muted}>Not uploaded</Text>
     )}
-  </View>
+  </Surface>
 );
 
-const AvatarDisplay = ({ uri, size }: { uri?: string; size: number }) => {
-  if (uri) {
-    return <Avatar.Image size={size} source={{ uri }} style={styles.avatar} />;
-  }
-  return <Avatar.Icon size={size} icon="account" style={styles.avatar} />;
-};
+const AvatarDisplay = ({ uri, size }: { uri?: string; size: number }) =>
+  uri ? (
+    <Avatar.Image size={size} source={{ uri }} />
+  ) : (
+    <Avatar.Icon size={size} icon="account" />
+  );
+
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
   container: {
-    flexGrow: 1,
     padding: 16,
+    paddingBottom: 120,
+    backgroundColor: '#F4F6FA',
   },
-  card: {
+
+  hero: {
+    borderRadius: 16,
     padding: 16,
-    borderRadius: 12,
-  },
-  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  heroText: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  tenantName: {
+    fontWeight: '700',
+  },
+  subText: {
+    color: '#666',
+    marginTop: 4,
+  },
+
+  section: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontWeight: '600',
     marginBottom: 12,
   },
-  title: {
-    fontWeight: '600',
-  },
-  avatarRow: {
-    alignItems: 'center',
-    marginVertical: 12,
-  },
-  avatar: {
-    backgroundColor: '#eee',
-  },
+
   infoRow: {
-    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
   },
   infoLabel: {
-    fontWeight: '600',
-    marginBottom: 2,
+    fontSize: 12,
+    color: '#888',
   },
   infoValue: {
-    color: '#555',
+    fontSize: 15,
+    fontWeight: '500',
   },
-  loaderContainer: {
+
+  docGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  docTile: {
+    width: '48%',
+    borderRadius: 14,
+    padding: 12,
+    alignItems: 'center',
+  },
+  docLabel: {
+    fontWeight: '600',
+    marginVertical: 6,
+  },
+  muted: {
+    color: '#999',
+    fontSize: 12,
+  },
+
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 24,
+  },
+
+  loader: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
