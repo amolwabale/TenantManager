@@ -29,6 +29,7 @@ import {
   saveTenant,
   TenantRecord,
 } from '../../service/tenantService';
+import { supabase } from '../../service/SupabaseClient';
 
 type FileState = { file?: FileInput | null; url?: string | null };
 type Props = NativeStackScreenProps<TenantStackParamList, 'TenantForm'>;
@@ -52,25 +53,62 @@ export default function TenantFormScreen() {
   const [company, setCompany] = React.useState('');
 
   const [profile, setProfile] = React.useState<FileState>({});
+  const [profileSignedUrl, setProfileSignedUrl] = React.useState<string | undefined>();
+
   const [adhar, setAdhar] = React.useState<FileState>({});
   const [pan, setPan] = React.useState<FileState>({});
   const [agreement, setAgreement] = React.useState<FileState>({});
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
+  /* ---------- SIGNED URL HELPER ---------- */
+  const createSignedUrl = async (fullUrl?: string | null) => {
+    if (!fullUrl) return undefined;
+
+    try {
+      const marker = '/tenant-manager/';
+      const idx = fullUrl.indexOf(marker);
+      if (idx === -1) return undefined;
+
+      const filePath = fullUrl.substring(idx + marker.length);
+
+      const { data, error } = await supabase.storage
+        .from('tenant-manager')
+        .createSignedUrl(filePath, 60 * 60); // 1 hour
+
+      if (error) {
+        console.warn('Signed URL error:', error.message);
+        return undefined;
+      }
+
+      return data.signedUrl;
+    } catch {
+      return undefined;
+    }
+  };
+
   const loadTenant = React.useCallback(async () => {
     if (mode !== 'edit' || !tenantId) return;
+
     try {
       setLoading(true);
       const t = await fetchTenantById(tenantId);
       if (!t) return;
+
       setName(t.name || '');
       setMobile(t.mobile || '');
       setAlternateMobile(t.alternate_mobile || '');
       setFamilyMembers(t.total_family_members || '');
       setAddress(t.address || '');
       setCompany(t.company_name || '');
+
       setProfile({ url: (t as any).profile_photo_url });
+
+      const signed = await createSignedUrl(
+        (t as any).profile_photo_url
+      );
+      setProfileSignedUrl(signed);
+
       setAdhar({ url: t.adhar_card_url });
       setPan({ url: t.pan_card_url });
       setAgreement({ url: t.agreement_url });
@@ -79,7 +117,11 @@ export default function TenantFormScreen() {
     }
   }, [mode, tenantId]);
 
-  useFocusEffect(React.useCallback(() => { loadTenant(); }, [loadTenant]));
+  useFocusEffect(
+    React.useCallback(() => {
+      loadTenant();
+    }, [loadTenant]),
+  );
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -95,7 +137,13 @@ export default function TenantFormScreen() {
     const r = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 });
     const a = r.assets?.[0];
     if (!a?.uri) return;
-    setProfile({ file: { uri: a.uri, name: a.fileName || 'photo.jpg', type: a.type }, url: null });
+
+    setProfile({
+      file: { uri: a.uri, name: a.fileName || 'photo.jpg', type: a.type },
+      url: null,
+    });
+
+    setProfileSignedUrl(undefined); // local preview takes over
   };
 
   const pickFile = async (setter: (f: FileState) => void) => {
@@ -103,14 +151,20 @@ export default function TenantFormScreen() {
       type: [docTypes.images, docTypes.pdf],
       copyTo: 'cachesDirectory',
     });
+
     setter({
-      file: { uri: r.fileCopyUri || r.uri, name: r.name || 'file', type: r.type },
+      file: {
+        uri: r.fileCopyUri ?? r.uri ?? undefined,
+        name: r.name || 'file',
+        type: r.type || undefined,
+      },
       url: null,
     });
   };
 
   const save = async () => {
     if (!validate()) return;
+
     try {
       setSaving(true);
       await saveTenant({
@@ -123,15 +177,25 @@ export default function TenantFormScreen() {
         company_name: company,
         files: { profile, adhar, pan, agreement },
       });
-      Alert.alert('Saved', 'Tenant saved successfully', [{ text: 'OK', onPress: navigation.goBack }]);
+      Alert.alert('Saved', 'Tenant saved successfully', [
+        { text: 'OK', onPress: navigation.goBack },
+      ]);
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <View style={styles.loader}><ActivityIndicator size="large" /></View>;
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
+
+  const avatarUri = profile.file
+    ? profile.file.uri
+    : profileSignedUrl;
 
   return (
     <>
@@ -139,7 +203,7 @@ export default function TenantFormScreen() {
         <ScrollView contentContainerStyle={styles.container}>
           {/* HERO */}
           <Surface style={styles.hero} elevation={4}>
-            <AvatarDisplay uri={profile.url} size={88} />
+            <AvatarDisplay uri={avatarUri} size={88} />
             <View style={{ marginLeft: 16 }}>
               <Text variant="titleLarge" style={{ fontWeight: '700' }}>
                 {mode === 'edit' ? 'Edit Tenant' : 'Add Tenant'}
