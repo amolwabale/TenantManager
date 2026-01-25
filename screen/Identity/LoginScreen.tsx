@@ -60,8 +60,6 @@ export default function LoginScreen() {
         return;
       };
 
-      navigation.replace('MainTabs');
-
     } catch (error: any) {
       Alert.alert('Login Failed', error.message);
     } finally {
