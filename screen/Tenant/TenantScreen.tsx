@@ -1,6 +1,13 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import React from 'react';
-import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import {
   ActivityIndicator,
   Avatar,
@@ -19,69 +26,88 @@ type Nav = NativeStackNavigationProp<TenantStackParamList, 'TenantList'>;
 
 export default function TenantScreen() {
   const navigation = useNavigation<Nav>();
-  const [loading, setLoading] = React.useState(false);
+
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
+
   const [tenants, setTenants] = React.useState<TenantRecord[]>([]);
   const [signedUrls, setSignedUrls] = React.useState<Record<number, string>>({});
+
+  /* ---------------- SIGNED URL ---------------- */
 
   const createSignedUrl = async (fullUrl?: string | null) => {
     if (!fullUrl) return undefined;
 
-    try {
-      // Extract path AFTER bucket name
-      // public/tenant-manager/<PATH>
-      const marker = '/tenant-manager/';
-      const index = fullUrl.indexOf(marker);
-      if (index === -1) return undefined;
+    const marker = '/tenant-manager/';
+    const index = fullUrl.indexOf(marker);
+    if (index === -1) return undefined;
 
-      const filePath = fullUrl.substring(index + marker.length);
+    const filePath = fullUrl.substring(index + marker.length);
 
-      const { data, error } = await supabase.storage
-        .from('tenant-manager')
-        .createSignedUrl(filePath, 60 * 60); // 1 hour
+    const { data, error } = await supabase.storage
+      .from('tenant-manager')
+      .createSignedUrl(filePath, 60 * 60);
 
-      if (error) {
-        console.warn('Signed URL error:', error.message);
-        return undefined;
-      }
-
-      return data.signedUrl;
-    } catch (e:any){
-      console.error(e);
+    if (error) {
+      console.warn('Signed URL error:', error.message);
+      return undefined;
     }
+
+    return data.signedUrl;
   };
 
-  const load = React.useCallback(async () => {
+  /* ---------------- LOAD TENANTS ---------------- */
+
+  const loadTenants = React.useCallback(async (isRefresh = false) => {
+    let active = true;
+
     try {
-      setLoading(true);
+      isRefresh ? setRefreshing(true) : setInitialLoading(true);
+
       const data = await fetchTenants();
+      if (!active) return;
+
       setTenants(data || []);
 
-      // Generate signed URLs
-      const urlMap: Record<number, string> = {};
-      await Promise.all(
-        (data || []).map(async (t) => {
-          const signed = await createSignedUrl(
-            (t as any).profile_photo_url
-          );
-          if (signed) {
-            urlMap[t.id] = signed;
-          }
-        }),
-      );
-
-      setSignedUrls(urlMap);
+      // 🔥 Signed URLs in background (non-blocking)
+      generateSignedUrls(data || []);
     } catch (err: any) {
       Alert.alert('Load Failed', err.message || 'Could not load tenants');
     } finally {
-      setLoading(false);
+      isRefresh ? setRefreshing(false) : setInitialLoading(false);
     }
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  /* ---------------- BACKGROUND SIGNED URL LOAD ---------------- */
+
+  const generateSignedUrls = async (data: TenantRecord[]) => {
+    const map: Record<number, string> = {};
+
+    await Promise.all(
+      data.map(async (t) => {
+        const signed = await createSignedUrl(
+          (t as any).profile_photo_url,
+        );
+        if (signed) map[t.id] = signed;
+      }),
+    );
+
+    setSignedUrls(map);
+  };
+
+  /* ---------------- FOCUS EFFECT ---------------- */
 
   useFocusEffect(
     React.useCallback(() => {
-      load();
-    }, [load]),
+      loadTenants(false);
+    }, [loadTenants]),
   );
+
+  /* ---------------- DELETE ---------------- */
 
   const handleDelete = (id: number) => {
     Alert.alert('Delete Tenant', 'Are you sure you want to delete this tenant?', [
@@ -91,32 +117,38 @@ export default function TenantScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            setLoading(true);
+            setRefreshing(true);
             await deleteTenant(id);
-            await load();
+            await loadTenants(true);
           } catch (err: any) {
             Alert.alert('Delete Failed', err.message || 'Could not delete tenant');
           } finally {
-            setLoading(false);
+            setRefreshing(false);
           }
         },
       },
     ]);
   };
 
+  /* ---------------- RENDER ITEM ---------------- */
+
   const renderItem = ({ item }: { item: TenantRecord }) => (
     <TenantCard
       item={item}
       photoUrl={signedUrls[item.id]}
       onPress={() => navigation.navigate('TenantView', { tenantId: item.id })}
-      onEdit={() => navigation.navigate('TenantForm', { tenantId: item.id, mode: 'edit' })}
+      onEdit={() =>
+        navigation.navigate('TenantForm', { tenantId: item.id, mode: 'edit' })
+      }
       onDelete={() => handleDelete(item.id)}
     />
   );
 
+  /* ---------------- UI ---------------- */
+
   return (
     <View style={styles.container}>
-      {loading && tenants.length === 0 ? (
+      {initialLoading ? (
         <View style={styles.loader}>
           <ActivityIndicator size="large" />
         </View>
@@ -128,8 +160,12 @@ export default function TenantScreen() {
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
-          refreshing={loading}
-          onRefresh={load}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadTenants(true)}
+            />
+          }
         />
       )}
 
@@ -156,32 +192,30 @@ const TenantCard = ({
   onPress: () => void;
   onEdit: () => void;
   onDelete: () => void;
-}) => {
-  return (
-    <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
-      <Surface style={styles.card} elevation={2}>
-        <View style={styles.cardRow}>
-          <AvatarDisplay uri={photoUrl} size={50} />
+}) => (
+  <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
+    <Surface style={styles.card} elevation={2}>
+      <View style={styles.cardRow}>
+        <AvatarDisplay uri={photoUrl} size={50} />
 
-          <View style={styles.cardBody}>
-            <Text variant="titleMedium" style={styles.cardTitle}>
-              {item.name || '-'}
-            </Text>
-            <Text style={styles.cardSubtitle}>{item.mobile || '-'}</Text>
-            <Text style={styles.cardCaption}>
-              Family Members: {item.total_family_members || '-'}
-            </Text>
-          </View>
-
-          <View style={styles.actions}>
-            <IconButton icon="pencil" size={18} onPress={onEdit} />
-            <IconButton icon="delete" size={18} onPress={onDelete} />
-          </View>
+        <View style={styles.cardBody}>
+          <Text variant="titleMedium" style={styles.cardTitle}>
+            {item.name || '-'}
+          </Text>
+          <Text style={styles.cardSubtitle}>{item.mobile || '-'}</Text>
+          <Text style={styles.cardCaption}>
+            Family Members: {item.total_family_members || '-'}
+          </Text>
         </View>
-      </Surface>
-    </TouchableOpacity>
-  );
-};
+
+        <View style={styles.actions}>
+          <IconButton icon="pencil" size={18} onPress={onEdit} />
+          <IconButton icon="delete" size={18} onPress={onDelete} />
+        </View>
+      </View>
+    </Surface>
+  </TouchableOpacity>
+);
 
 const AvatarDisplay = ({ uri, size }: { uri?: string; size: number }) =>
   uri ? (
@@ -214,18 +248,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F4F6FA',
   },
-
   listContent: {
     padding: 16,
     paddingBottom: 120,
   },
-
   loader: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-
   card: {
     borderRadius: 16,
     padding: 14,
@@ -254,13 +285,11 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
   },
-
   fab: {
     position: 'absolute',
     right: 16,
     bottom: 24,
   },
-
   emptyState: {
     flex: 1,
     justifyContent: 'center',

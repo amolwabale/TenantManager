@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  ActivityIndicator,
   Button,
   HelperText,
   Surface,
@@ -11,23 +12,38 @@ import {
 } from 'react-native-paper';
 import supabase from '../../service/SupabaseClient';
 
-type Errors = Partial<Record<'propertyName' | 'propertyAddress' | 'water' | 'electricity', string>>;
+type Errors = Partial<
+  Record<'propertyName' | 'propertyAddress' | 'water' | 'electricity', string>
+>;
 
 export default function SettingScreen() {
   const theme = useTheme();
+
+  /* ---------------- FORM STATE ---------------- */
+
   const [propertyName, setPropertyName] = React.useState('');
   const [propertyAddress, setPropertyAddress] = React.useState('');
   const [water, setWater] = React.useState('');
   const [electricity, setElectricity] = React.useState('');
   const [recordId, setRecordId] = React.useState<number | null>(null);
-  const [loading, setLoading] = React.useState(false);
+
+  /* ---------------- UI STATE ---------------- */
+
+  const [initialLoading, setInitialLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
   const [errors, setErrors] = React.useState<Errors>({});
 
+  /* ---------------- FETCH SETTINGS ---------------- */
+
   const fetchSettings = React.useCallback(async () => {
+    let active = true;
+
     try {
-      setLoading(true);
+      setInitialLoading(true);
+
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
+
       const userId = userData.user?.id;
       if (!userId) throw new Error('User not found. Please login again.');
 
@@ -40,19 +56,16 @@ export default function SettingScreen() {
         .limit(1)
         .maybeSingle();
 
+      if (!active) return;
       if (error) throw error;
 
       if (data) {
         setRecordId(data.id ?? null);
         setPropertyName(data.property_name ?? '');
         setPropertyAddress(data.property_address ?? '');
-        setWater(
-          data.water === null || data.water === undefined ? '' : String(data.water),
-        );
+        setWater(data.water != null ? String(data.water) : '');
         setElectricity(
-          data.electricity_unit === null || data.electricity_unit === undefined
-            ? ''
-            : String(data.electricity_unit),
+          data.electricity_unit != null ? String(data.electricity_unit) : '',
         );
       } else {
         setRecordId(null);
@@ -64,8 +77,12 @@ export default function SettingScreen() {
     } catch (err: any) {
       Alert.alert('Load Failed', err.message || 'Could not load settings');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useFocusEffect(
@@ -74,8 +91,11 @@ export default function SettingScreen() {
     }, [fetchSettings]),
   );
 
+  /* ---------------- VALIDATION ---------------- */
+
   const validate = () => {
     const nextErrors: Errors = {};
+
     if (!propertyName.trim()) {
       nextErrors.propertyName = 'Property name is required';
     }
@@ -85,151 +105,128 @@ export default function SettingScreen() {
     if (electricity && isNaN(Number(electricity))) {
       nextErrors.electricity = 'Electricity unit must be a number';
     }
+
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
+
+  /* ---------------- SAVE ---------------- */
 
   const handleSave = async () => {
     if (!validate()) return;
 
     try {
-      setLoading(true);
+      setSaving(true);
+
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
+
       const userId = userData.user?.id;
       if (!userId) throw new Error('User not found. Please login again.');
 
-      const waterValue = water ? Number(water) : null;
-      const electricityValue = electricity ? Number(electricity) : null;
+      const payload = {
+        property_name: propertyName.trim(),
+        property_address: propertyAddress.trim() || null,
+        water: water ? Number(water) : null,
+        electricity_unit: electricity ? Number(electricity) : null,
+        user_id: userId,
+        modified_at: new Date().toISOString(),
+      };
 
-      let data: any = null;
-      let error: any = null;
+      let result;
 
       if (recordId) {
-        ({ data, error } = await supabase
+        result = await supabase
           .from('setting')
-          .update({
-            property_name: propertyName.trim(),
-            property_address: propertyAddress.trim() || null,
-            water: waterValue,
-            electricity_unit: electricityValue,
-            user_id: userId,
-            modified_at: new Date().toISOString(),
-          })
+          .update(payload)
           .eq('id', recordId)
           .eq('user_id', userId)
           .select()
-          .maybeSingle());
+          .maybeSingle();
       } else {
-        ({ data, error } = await supabase
+        result = await supabase
           .from('setting')
-          .insert({
-            property_name: propertyName.trim(),
-            property_address: propertyAddress.trim() || null,
-            water: waterValue,
-            electricity_unit: electricityValue,
-            user_id: userId,
-          })
+          .insert(payload)
           .select()
-          .maybeSingle());
+          .maybeSingle();
       }
 
-      if (error) {
-        throw new Error(error.message);
+      if (result.error) {
+        throw new Error(result.error.message);
       }
 
       Alert.alert('Saved', 'Settings have been saved successfully.');
-      if (data?.id) {
-        setRecordId(data.id);
+
+      if (result.data?.id) {
+        setRecordId(result.data.id);
       }
     } catch (err: any) {
       Alert.alert('Save Failed', err.message || 'Something went wrong');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
+
+  /* ---------------- LOADER ---------------- */
+
+  if (initialLoading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  /* ---------------- UI ---------------- */
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Surface style={styles.card} elevation={4}>
-        <Text variant="headlineMedium" style={[styles.title, { color: theme.colors.primary }]}>
+        <Text
+          variant="headlineMedium"
+          style={[styles.title, { color: theme.colors.primary }]}
+        >
           Property Settings
         </Text>
 
-        <View style={styles.field}>
-          <TextInput
-            label="Property Name *"
-            mode="outlined"
-            value={propertyName}
-            onChangeText={(text) => {
-              setPropertyName(text);
-              setErrors((prev) => ({ ...prev, propertyName: '' }));
-            }}
-            error={!!errors.propertyName}
-          />
-          <HelperText type="error" visible={!!errors.propertyName}>
-            {errors.propertyName || ' '}
-          </HelperText>
-        </View>
+        <Field
+          label="Property Name *"
+          value={propertyName}
+          error={errors.propertyName}
+          onChange={setPropertyName}
+        />
 
-        <View style={styles.field}>
-          <TextInput
-            label="Property Address"
-            mode="outlined"
-            multiline
-            value={propertyAddress}
-            onChangeText={(text) => {
-              setPropertyAddress(text);
-              setErrors((prev) => ({ ...prev, propertyAddress: '' }));
-            }}
-            error={!!errors.propertyAddress}
-          />
-          <HelperText type="error" visible={!!errors.propertyAddress}>
-            {errors.propertyAddress || ' '}
-          </HelperText>
-        </View>
+        <Field
+          label="Property Address"
+          value={propertyAddress}
+          error={errors.propertyAddress}
+          onChange={setPropertyAddress}
+          multiline
+        />
 
-        <View style={styles.field}>
-          <TextInput
-            label="Water (numeric)"
-            mode="outlined"
-            keyboardType="numeric"
-            value={water}
-            onChangeText={(text) => {
-              setWater(text);
-              setErrors((prev) => ({ ...prev, water: '' }));
-            }}
-            error={!!errors.water}
-          />
-          <HelperText type="error" visible={!!errors.water}>
-            {errors.water || ' '}
-          </HelperText>
-        </View>
+        <Field
+          label="Water (numeric)"
+          value={water}
+          error={errors.water}
+          onChange={setWater}
+          keyboardType="numeric"
+        />
 
-        <View style={styles.field}>
-          <TextInput
-            label="Electricity Unit (numeric)"
-            mode="outlined"
-            keyboardType="numeric"
-            value={electricity}
-            onChangeText={(text) => {
-              setElectricity(text);
-              setErrors((prev) => ({ ...prev, electricity: '' }));
-            }}
-            error={!!errors.electricity}
-          />
-          <HelperText type="error" visible={!!errors.electricity}>
-            {errors.electricity || ' '}
-          </HelperText>
-        </View>
+        <Field
+          label="Electricity Unit (numeric)"
+          value={electricity}
+          error={errors.electricity}
+          onChange={setElectricity}
+          keyboardType="numeric"
+        />
 
         <Button
           mode="contained"
           onPress={handleSave}
-          disabled={loading}
+          loading={saving}
+          disabled={saving}
           style={styles.primaryButton}
           contentStyle={styles.buttonContent}
-          loading={loading}
         >
           Save
         </Button>
@@ -238,11 +235,44 @@ export default function SettingScreen() {
   );
 }
 
+/* ---------------- FIELD COMPONENT ---------------- */
+
+const Field = ({
+  label,
+  value,
+  onChange,
+  error,
+  keyboardType,
+  multiline,
+}: any) => (
+  <View style={styles.field}>
+    <TextInput
+      label={label}
+      mode="outlined"
+      value={value}
+      onChangeText={onChange}
+      keyboardType={keyboardType}
+      multiline={multiline}
+      error={!!error}
+    />
+    <HelperText type="error" visible={!!error}>
+      {error || ' '}
+    </HelperText>
+  </View>
+);
+
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     padding: 16,
     backgroundColor: '#f5f5f5',
+  },
+  loader: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   card: {
     padding: 16,
