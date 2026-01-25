@@ -13,6 +13,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { TenantStackParamList } from '../../navigation/StackParam';
 import { deleteTenant, fetchTenants, TenantRecord } from '../../service/tenantService';
+import { supabase } from '../../service/SupabaseClient';
 
 type Nav = NativeStackNavigationProp<TenantStackParamList, 'TenantList'>;
 
@@ -20,12 +21,55 @@ export default function TenantScreen() {
   const navigation = useNavigation<Nav>();
   const [loading, setLoading] = React.useState(false);
   const [tenants, setTenants] = React.useState<TenantRecord[]>([]);
+  const [signedUrls, setSignedUrls] = React.useState<Record<number, string>>({});
+
+  const createSignedUrl = async (fullUrl?: string | null) => {
+    if (!fullUrl) return undefined;
+
+    try {
+      // Extract path AFTER bucket name
+      // public/tenant-manager/<PATH>
+      const marker = '/tenant-manager/';
+      const index = fullUrl.indexOf(marker);
+      if (index === -1) return undefined;
+
+      const filePath = fullUrl.substring(index + marker.length);
+
+      const { data, error } = await supabase.storage
+        .from('tenant-manager')
+        .createSignedUrl(filePath, 60 * 60); // 1 hour
+
+      if (error) {
+        console.warn('Signed URL error:', error.message);
+        return undefined;
+      }
+
+      return data.signedUrl;
+    } catch (e:any){
+      console.error(e);
+    }
+  };
 
   const load = React.useCallback(async () => {
     try {
       setLoading(true);
       const data = await fetchTenants();
       setTenants(data || []);
+
+      // Generate signed URLs
+      const urlMap: Record<number, string> = {};
+      await Promise.all(
+        (data || []).map(async (t) => {
+          const signed = await createSignedUrl(
+            (t as any).profile_photo_url
+          );
+          if (signed) {
+            urlMap[t.id] = signed;
+          }
+        }),
+      );
+
+      setSignedUrls(urlMap);
     } catch (err: any) {
       Alert.alert('Load Failed', err.message || 'Could not load tenants');
     } finally {
@@ -63,6 +107,7 @@ export default function TenantScreen() {
   const renderItem = ({ item }: { item: TenantRecord }) => (
     <TenantCard
       item={item}
+      photoUrl={signedUrls[item.id]}
       onPress={() => navigation.navigate('TenantView', { tenantId: item.id })}
       onEdit={() => navigation.navigate('TenantForm', { tenantId: item.id, mode: 'edit' })}
       onDelete={() => handleDelete(item.id)}
@@ -101,22 +146,22 @@ export default function TenantScreen() {
 
 const TenantCard = ({
   item,
+  photoUrl,
   onPress,
   onEdit,
   onDelete,
 }: {
   item: TenantRecord;
+  photoUrl?: string;
   onPress: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) => {
-  const photo = (item as any).profile_photo_url as string | undefined;
-
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
       <Surface style={styles.card} elevation={2}>
         <View style={styles.cardRow}>
-          <AvatarDisplay uri={photo} size={48} />
+          <AvatarDisplay uri={photoUrl} size={50} />
 
           <View style={styles.cardBody}>
             <Text variant="titleMedium" style={styles.cardTitle}>

@@ -13,6 +13,7 @@ import {
 } from 'react-native-paper';
 import { TenantStackParamList } from '../../navigation/StackParam';
 import { fetchTenantById, TenantRecord } from '../../service/tenantService';
+import { supabase } from '../../service/SupabaseClient'; // ✅ REQUIRED
 
 type Props = NativeStackScreenProps<TenantStackParamList, 'TenantView'>;
 
@@ -22,7 +23,33 @@ export default function TenantViewScreen() {
   const { tenantId } = route.params;
 
   const [tenant, setTenant] = React.useState<TenantRecord | null>(null);
+  const [profileSignedUrl, setProfileSignedUrl] = React.useState<string | undefined>();
   const [loading, setLoading] = React.useState(false);
+
+  const createSignedUrl = async (fullUrl?: string | null) => {
+    if (!fullUrl) return undefined;
+
+    try {
+      const marker = '/tenant-manager/';
+      const index = fullUrl.indexOf(marker);
+      if (index === -1) return undefined;
+
+      const filePath = fullUrl.substring(index + marker.length);
+
+      const { data, error } = await supabase.storage
+        .from('tenant-manager')
+        .createSignedUrl(filePath, 60 * 60); // 1 hour
+
+      if (error) {
+        console.warn('Signed URL error:', error.message);
+        return undefined;
+      }
+
+      return data.signedUrl;
+    } catch {
+      return undefined;
+    }
+  };
 
   const load = React.useCallback(async () => {
     try {
@@ -34,7 +61,14 @@ export default function TenantViewScreen() {
         ]);
         return;
       }
+
       setTenant(data);
+
+      // 🔐 Generate signed URL for profile photo
+      const signed = await createSignedUrl(
+        (data as any).profile_photo_url
+      );
+      setProfileSignedUrl(signed);
     } catch (err: any) {
       Alert.alert('Load Failed', err.message || 'Could not load tenant', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -68,10 +102,7 @@ export default function TenantViewScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         {/* HERO */}
         <Surface style={styles.hero} elevation={2}>
-          <AvatarDisplay
-            uri={(tenant as any).profile_photo_url as string | undefined}
-            size={88}
-          />
+          <AvatarDisplay uri={profileSignedUrl} size={88} />
           <View style={styles.heroText}>
             <Text variant="titleLarge" style={styles.tenantName}>
               {tenant.name}
