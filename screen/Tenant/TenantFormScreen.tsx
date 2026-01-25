@@ -9,7 +9,6 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Avatar,
@@ -58,7 +57,6 @@ export default function TenantFormScreen() {
   const [pan, setPan] = React.useState<FileState>({});
   const [agreement, setAgreement] = React.useState<FileState>({});
   const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const insets = useSafeAreaInsets();
 
   const setFromTenant = (t: TenantRecord) => {
     setTenant(t);
@@ -192,16 +190,12 @@ export default function TenantFormScreen() {
   }
 
   return (
-    <SafeAreaView
-      edges={['top', 'left', 'right']}
-      style={[styles.safeArea, { paddingTop: insets.top }]}
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.container}>
-          <Surface style={styles.card} elevation={4}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Surface style={styles.card} elevation={4}>
           <Text variant="headlineMedium" style={[styles.title, { color: theme.colors.primary }]}>
             {mode === 'edit' ? 'Edit Tenant' : 'Add Tenant'}
           </Text>
@@ -315,20 +309,19 @@ export default function TenantFormScreen() {
             onRemove={() => removeFile(setAgreement)}
           />
 
-            <Button
-              mode="contained"
-              onPress={handleSave}
-              loading={saving}
-              disabled={saving}
-              style={styles.saveButton}
-              contentStyle={styles.saveButtonContent}
-            >
-              Save
-            </Button>
-          </Surface>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          <Button
+            mode="contained"
+            onPress={handleSave}
+            loading={saving}
+            disabled={saving}
+            style={styles.saveButton}
+            contentStyle={styles.saveButtonContent}
+          >
+            Save
+          </Button>
+        </Surface>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -370,10 +363,6 @@ const AvatarDisplay = ({ uri, size }: { uri?: string; size: number }) => {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
   container: {
     flexGrow: 1,
     padding: 16,

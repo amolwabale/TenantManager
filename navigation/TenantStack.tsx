@@ -9,7 +9,7 @@ const Stack = createNativeStackNavigator<TenantStackParamList>();
 
 export default function TenantStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator>
       <Stack.Screen name="TenantList" component={TenantScreen} />
       <Stack.Screen name="TenantForm" component={TenantFormScreen} />
       <Stack.Screen name="TenantView" component={TenantViewScreen} />

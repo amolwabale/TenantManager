@@ -2,7 +2,6 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, Avatar, Button, IconButton, Surface, Text } from 'react-native-paper';
 import { TenantStackParamList } from '../../navigation/StackParam';
 import { fetchTenantById, TenantRecord } from '../../service/tenantService';
@@ -16,7 +15,6 @@ export default function TenantViewScreen() {
 
   const [tenant, setTenant] = React.useState<TenantRecord | null>(null);
   const [loading, setLoading] = React.useState(false);
-  const insets = useSafeAreaInsets();
 
   const load = React.useCallback(async () => {
     try {
@@ -42,14 +40,11 @@ export default function TenantViewScreen() {
 
   if (loading || !tenant) {
     return (
-      <SafeAreaView
-        edges={['top', 'left', 'right']}
-        style={[styles.safeArea, { paddingTop: insets.top }]}
-      >
+      
         <View style={styles.loaderContainer}>
           <ActivityIndicator />
         </View>
-      </SafeAreaView>
+      
     );
   }
 
@@ -59,10 +54,7 @@ export default function TenantViewScreen() {
   };
 
   return (
-    <SafeAreaView
-      edges={['top', 'left', 'right']}
-      style={[styles.safeArea, { paddingTop: insets.top }]}
-    >
+    
       <ScrollView contentContainerStyle={styles.container}>
         <Surface style={styles.card} elevation={4}>
           <View style={styles.headerRow}>
@@ -88,7 +80,6 @@ export default function TenantViewScreen() {
           <DocRow label="Agreement" url={tenant.agreement_url} onPress={() => openLink(tenant.agreement_url)} />
         </Surface>
       </ScrollView>
-    </SafeAreaView>
   );
 }
 

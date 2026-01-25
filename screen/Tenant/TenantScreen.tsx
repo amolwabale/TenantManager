@@ -1,7 +1,6 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import React from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Avatar,
@@ -23,7 +22,6 @@ export default function TenantScreen() {
   const navigation = useNavigation<Nav>();
   const [loading, setLoading] = React.useState(false);
   const [tenants, setTenants] = React.useState<TenantRecord[]>([]);
-  const insets = useSafeAreaInsets();
 
   const load = React.useCallback(async () => {
     try {
@@ -74,10 +72,7 @@ export default function TenantScreen() {
   );
 
   return (
-    <SafeAreaView
-      edges={['top', 'left', 'right']}
-      style={[styles.safeArea, { paddingTop: insets.top }]}
-    >
+    <View style={styles.container}>
       {loading && tenants.length === 0 ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator />
@@ -101,7 +96,7 @@ export default function TenantScreen() {
         color="white"
         onPress={() => navigation.navigate('TenantForm', { mode: 'add' })}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -161,7 +156,7 @@ const EmptyState = ({ onAdd }: { onAdd: () => void }) => (
 );
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
   listContent: { padding: 12, paddingBottom: 96 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   card: {
