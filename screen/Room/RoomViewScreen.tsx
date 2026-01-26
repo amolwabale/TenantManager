@@ -12,8 +12,33 @@ import {
 } from 'react-native-paper';
 import { RoomStackParamList } from '../../navigation/StackParam';
 import { fetchRoomById, RoomRecord } from '../../service/RoomService';
+import {
+  fetchActiveTenantForRoom,
+  fetchTenantHistoryForRoom,
+  TenantHistoryRecord,
+  TenantRoomRecord,
+} from '../../service/TenantRoomService';
 
 type Props = NativeStackScreenProps<RoomStackParamList, 'RoomView'>;
+
+const formatDate = (d?: string | null) =>
+  d
+    ? new Date(d).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '-';
+
+const getInitials = (name?: string | null) => {
+  const parts = (name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (parts.length === 0) return 'T';
+  return parts.map(p => p[0]?.toUpperCase()).join('');
+};
 
 export default function RoomViewScreen() {
   const route = useRoute<Props['route']>();
@@ -21,6 +46,8 @@ export default function RoomViewScreen() {
   const { roomId } = route.params;
 
   const [room, setRoom] = React.useState<RoomRecord | null>(null);
+  const [activeTenant, setActiveTenant] = React.useState<TenantRoomRecord | null>(null);
+  const [tenantHistory, setTenantHistory] = React.useState<TenantHistoryRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
   const load = React.useCallback(async () => {
@@ -34,6 +61,13 @@ export default function RoomViewScreen() {
         return;
       }
       setRoom(data);
+
+      const [active, history] = await Promise.all([
+        fetchActiveTenantForRoom(roomId),
+        fetchTenantHistoryForRoom(roomId),
+      ]);
+      setActiveTenant(active);
+      setTenantHistory(history || []);
     } finally {
       setLoading(false);
     }
@@ -83,6 +117,78 @@ export default function RoomViewScreen() {
             Additional Details
           </Text>
           <InfoRow icon="comment-text-outline" label="Comment" value={room.comment} />
+        </Surface>
+
+        {/* TENANT OCCUPANCY (VIEW ONLY) */}
+        <Surface style={styles.section} elevation={2}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Tenant Occupancy
+          </Text>
+
+          {activeTenant ? (
+            <Surface style={styles.occupancyCard} elevation={1}>
+              <View style={styles.occupancyHeader}>
+                <Avatar.Text
+                  size={44}
+                  label={getInitials(activeTenant.tenant?.name)}
+                />
+
+                <View style={styles.occupancyHeaderText}>
+                  <Text variant="titleMedium" style={styles.occupancyName}>
+                    {activeTenant.tenant?.name || '-'}
+                  </Text>
+                  <Text style={styles.occupancySub}>Active tenant</Text>
+                </View>
+
+                <View style={styles.statusPill}>
+                  <Text style={styles.statusPillText}>Occupied</Text>
+                </View>
+              </View>
+
+              <View style={styles.occupancyMetaRow}>
+                <IconButton icon="calendar" size={18} style={styles.metaIcon} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.metaLabel}>Joining date</Text>
+                  <Text style={styles.metaValue}>
+                    {formatDate(activeTenant.joining_date)}
+                  </Text>
+                </View>
+              </View>
+            </Surface>
+          ) : (
+            <Surface style={styles.occupancyHint} elevation={0}>
+              <Avatar.Icon size={40} icon="account-off-outline" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ fontWeight: '700' }}>Not assigned</Text>
+                <Text style={{ color: '#666', marginTop: 2 }}>
+                  No tenant is currently occupying this room.
+                </Text>
+              </View>
+            </Surface>
+          )}
+        </Surface>
+
+        {/* TENANT HISTORY (VIEW ONLY) */}
+        <Surface style={styles.section} elevation={2}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Tenant History
+          </Text>
+
+          {tenantHistory.length > 0 ? (
+            tenantHistory.map((h, i) => (
+              <Surface key={i} style={styles.historyCard} elevation={1}>
+                <Avatar.Icon size={36} icon="account" />
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ fontWeight: '600' }}>{h.tenant_name}</Text>
+                  <Text style={{ color: '#666', marginTop: 2 }}>
+                    {formatDate(h.joining_date)} → {formatDate(h.leaving_date)}
+                  </Text>
+                </View>
+              </Surface>
+            ))
+          ) : (
+            <Text style={styles.muted}>No history yet</Text>
+          )}
         </Surface>
       </ScrollView>
 
@@ -151,11 +257,11 @@ const styles = StyleSheet.create({
 
   highlightRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 20,
   },
   highlightCard: {
-    width: '31%',
+    flex: 1,
     borderRadius: 16,
     padding: 12,
     alignItems: 'center',
@@ -173,6 +279,7 @@ const styles = StyleSheet.create({
   section: {
     borderRadius: 16,
     padding: 16,
+    marginTop: 16,
   },
   sectionTitle: {
     fontWeight: '600',
@@ -191,6 +298,82 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     marginTop: 2,
+  },
+
+  muted: {
+    color: '#999',
+    fontSize: 12,
+    marginTop: 4,
+  },
+
+  /* --- Tenant occupancy styles (copied from RoomForm for consistency) --- */
+  occupancyCard: {
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 8,
+  },
+  occupancyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  occupancyHeaderText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  occupancyName: {
+    fontWeight: '800',
+  },
+  occupancySub: {
+    color: '#666',
+    marginTop: 2,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1A73E8',
+  },
+  occupancyMetaRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E6E6E6',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaIcon: {
+    margin: 0,
+    marginRight: 6,
+  },
+  metaLabel: {
+    fontSize: 12,
+    color: '#888',
+  },
+  metaValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  occupancyHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#F6F8FF',
+    marginTop: 8,
+  },
+
+  historyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginTop: 8,
+    borderRadius: 14,
   },
 
   fab: {
