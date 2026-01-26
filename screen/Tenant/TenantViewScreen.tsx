@@ -14,8 +14,19 @@ import {
 import { TenantStackParamList } from '../../navigation/StackParam';
 import { fetchTenantById, TenantRecord } from '../../service/tenantService';
 import { supabase } from '../../service/SupabaseClient'; // ✅ REQUIRED
+import { fetchRooms } from '../../service/RoomService';
+import { fetchActiveRoomForTenants } from '../../service/TenantRoomService';
 
 type Props = NativeStackScreenProps<TenantStackParamList, 'TenantView'>;
+
+const formatDate = (d?: string | null) =>
+  d
+    ? new Date(d).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '-';
 
 export default function TenantViewScreen() {
   const route = useRoute<Props['route']>();
@@ -24,6 +35,8 @@ export default function TenantViewScreen() {
 
   const [tenant, setTenant] = React.useState<TenantRecord | null>(null);
   const [profileSignedUrl, setProfileSignedUrl] = React.useState<string | undefined>();
+  const [roomName, setRoomName] = React.useState<string>('No room assigned');
+  const [joiningDateLine, setJoiningDateLine] = React.useState<string | undefined>();
   const [loading, setLoading] = React.useState(false);
 
   const createSignedUrl = async (fullUrl?: string | null) => {
@@ -64,11 +77,32 @@ export default function TenantViewScreen() {
 
       setTenant(data);
 
-      // 🔐 Generate signed URL for profile photo
-      const signed = await createSignedUrl(
-        (data as any).profile_photo_url
-      );
+      const [signed, rooms, activeMap] = await Promise.all([
+        // 🔐 Signed URL for profile photo
+        createSignedUrl((data as any).profile_photo_url),
+
+        // Rooms list to resolve room_id → room_name
+        fetchRooms(),
+
+        // Active mapping for this tenant (leaving_date is null)
+        fetchActiveRoomForTenants([tenantId]),
+      ]);
+
       setProfileSignedUrl(signed);
+
+      const roomNameById: Record<number, string> = {};
+      (rooms || []).forEach((r: any) => {
+        if (r?.id != null) roomNameById[r.id] = r.name || '-';
+      });
+
+      const assignment = activeMap?.[tenantId];
+      if (assignment) {
+        setRoomName(roomNameById[assignment.room_id] || '-');
+        setJoiningDateLine(`Joined on ${formatDate(assignment.joining_date)}`);
+      } else {
+        setRoomName('No room assigned');
+        setJoiningDateLine(undefined);
+      }
     } catch (err: any) {
       Alert.alert('Load Failed', err.message || 'Could not load tenant', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -107,7 +141,10 @@ export default function TenantViewScreen() {
             <Text variant="titleLarge" style={styles.tenantName}>
               {tenant.name}
             </Text>
-            <Text style={styles.subText}>{tenant.mobile}</Text>
+            <Text style={styles.subText}>{roomName}</Text>
+            {!!joiningDateLine && (
+              <Text style={styles.subSubText}>{joiningDateLine}</Text>
+            )}
           </View>
         </Surface>
 
@@ -251,6 +288,12 @@ const styles = StyleSheet.create({
   subText: {
     color: '#666',
     marginTop: 4,
+  },
+  subSubText: {
+    color: '#888',
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '500',
   },
 
   section: {
