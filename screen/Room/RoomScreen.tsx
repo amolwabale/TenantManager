@@ -15,28 +15,92 @@ import {
   FAB,
   Surface,
   Text,
+  useTheme,
 } from 'react-native-paper';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RoomStackParamList } from '../../navigation/StackParam';
 import { deleteRoom, fetchRooms, RoomRecord } from '../../service/RoomService';
+import {
+  fetchActiveTenantsForRooms,
+  TenantRoomRecord,
+} from '../../service/TenantRoomService';
+import supabase from '../../service/SupabaseClient';
 
 type Nav = NativeStackNavigationProp<RoomStackParamList, 'RoomList'>;
 
 const ICON_SIZE = 48;
 const DIVIDER_HEIGHT = ICON_SIZE;
 
+const formatDate = (d?: string | null) =>
+  d
+    ? new Date(d).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '-';
+
+const getInitials = (name?: string | null) => {
+  const parts = (name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (parts.length === 0) return 'T';
+  return parts.map(p => p[0]?.toUpperCase()).join('');
+};
+
+const createSignedUrl = async (fullUrl?: string | null) => {
+  if (!fullUrl) return undefined;
+  const marker = '/tenant-manager/';
+  const index = fullUrl.indexOf(marker);
+  if (index === -1) return undefined;
+  const filePath = fullUrl.substring(index + marker.length);
+
+  const { data, error } = await supabase.storage
+    .from('tenant-manager')
+    .createSignedUrl(filePath, 60 * 60);
+
+  if (error) return undefined;
+  return data.signedUrl;
+};
+
 export default function RoomScreen() {
   const navigation = useNavigation<Nav>();
+  const theme = useTheme();
 
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [rooms, setRooms] = React.useState<RoomRecord[]>([]);
+  const [activeByRoom, setActiveByRoom] = React.useState<
+    Record<number, TenantRoomRecord | null>
+  >({});
+  const [occupantPhotoByRoom, setOccupantPhotoByRoom] = React.useState<
+    Record<number, string>
+  >({});
 
   const loadRooms = React.useCallback(async (isRefresh = false) => {
     try {
       isRefresh ? setRefreshing(true) : setInitialLoading(true);
       const data = await fetchRooms();
       setRooms(data || []);
+
+      // Load occupant (active tenant) for each room in one call
+      const map = await fetchActiveTenantsForRooms((data || []).map((r) => r.id));
+      setActiveByRoom(map);
+
+      // Signed URLs for occupant profile photos
+      const photoMap: Record<number, string> = {};
+      await Promise.all(
+        Object.entries(map).map(async ([roomIdStr, occ]) => {
+          if (!occ) return;
+          const roomId = Number(roomIdStr);
+          const fullUrl = (occ.tenant as any)?.profile_photo_url as string | null | undefined;
+          const signed = await createSignedUrl(fullUrl);
+          if (signed) photoMap[roomId] = signed;
+        }),
+      );
+      setOccupantPhotoByRoom(photoMap);
     } catch (err: any) {
       Alert.alert('Load Failed', err.message || 'Could not load rooms');
     } finally {
@@ -72,6 +136,14 @@ export default function RoomScreen() {
   const renderItem = ({ item }: { item: RoomRecord }) => (
     <RoomCard
       item={item}
+      occupant={activeByRoom[item.id]}
+      occupantPhotoUrl={occupantPhotoByRoom[item.id]}
+      themeColors={{
+        primary: theme.colors.primary,
+        primaryContainer: theme.colors.primaryContainer,
+        secondary: theme.colors.secondary,
+        secondaryContainer: theme.colors.secondaryContainer,
+      }}
       onView={() => navigation.navigate('RoomView', { roomId: item.id })}
       onEdit={() =>
         navigation.navigate('RoomForm', { roomId: item.id, mode: 'edit' })
@@ -116,11 +188,22 @@ export default function RoomScreen() {
 
 const RoomCard = ({
   item,
+  occupant,
+  occupantPhotoUrl,
+  themeColors,
   onView,
   onEdit,
   onDelete,
 }: {
   item: RoomRecord;
+  occupant: TenantRoomRecord | null | undefined;
+  occupantPhotoUrl?: string;
+  themeColors: {
+    primary: string;
+    primaryContainer: string;
+    secondary: string;
+    secondaryContainer: string;
+  };
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -131,21 +214,94 @@ const RoomCard = ({
       activeOpacity={0.85}
       onPress={onView}
     >
-      <Avatar.Icon size={ICON_SIZE} icon="home-outline" />
+      <View style={styles.leadingColumn}>
+        <View
+          style={[
+            styles.leadingIcon,
+            { backgroundColor: themeColors.primaryContainer },
+          ]}
+        >
+          <Avatar.Icon
+            size={ICON_SIZE}
+            icon="home-outline"
+            style={{ backgroundColor: 'transparent' }}
+            color={themeColors.primary}
+          />
+        </View>
 
-      {/* VERTICAL DIVIDER */}
-      <View style={styles.verticalDivider} />
+        <View style={styles.occupantAvatarWrap}>
+          {occupant ? (
+            occupantPhotoUrl ? (
+              <Avatar.Image size={30} source={{ uri: occupantPhotoUrl }} />
+            ) : (
+              <Avatar.Text
+                size={30}
+                label={getInitials(occupant.tenant?.name)}
+                style={{ backgroundColor: themeColors.secondaryContainer }}
+                color={themeColors.secondary}
+              />
+            )
+          ) : (
+            <Avatar.Icon
+              size={30}
+              icon="account-off-outline"
+              style={{ backgroundColor: '#EDEFF5' }}
+              color="#5B6475"
+            />
+          )}
+        </View>
+      </View>
 
       <View style={styles.cardBody}>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          {item.name || '-'}
-        </Text>
-        <Text style={styles.cardSubtitle}>
-          Type: {item.type || '-'}
-        </Text>
-        <Text style={styles.cardCaption}>
-          Rent: ₹{item.rent || '-'}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text variant="titleMedium" style={styles.cardTitle} numberOfLines={1}>
+            {item.name || '-'}
+          </Text>
+
+          <View
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor: occupant
+                  ? themeColors.secondaryContainer
+                  : '#EDEFF5',
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                { color: occupant ? themeColors.secondary : '#5B6475' },
+              ]}
+            >
+              {occupant ? 'Occupied' : 'Vacant'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.metaBlock}>
+          
+          <Text style={styles.cardSubtitle} numberOfLines={1}>
+            Rent: ₹{item.rent || '-'} | Deposit: ₹{item.deposit || '-'}
+          </Text>
+        </View>
+
+        {occupant ? (
+          <View style={styles.occupantBlock}>
+            <Text style={styles.occupantName} numberOfLines={1}>
+              {occupant.tenant?.name || 'Tenant'}
+            </Text>
+            <Text style={styles.occupantMeta} numberOfLines={1}>
+              Joined on {formatDate(occupant.joining_date)}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.occupantBlock}>
+            <Text style={styles.occupantMeta} numberOfLines={1}>
+              No tenant assigned
+            </Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
 
@@ -195,22 +351,80 @@ const styles = StyleSheet.create({
   cardContent: {
     flex: 1,
     flexDirection: 'row',
-    padding: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    alignItems: 'flex-start',
+  },
+
+  leadingColumn: {
     alignItems: 'center',
+    marginRight: 12,
+  },
+  leadingIcon: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  occupantAvatarWrap: {
+    marginTop: 10,
+    borderRadius: 999,
+    padding: 2,
+    backgroundColor: '#FFFFFF',
+    // subtle outline effect without hard border
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
 
-  verticalDivider: {
-    width: 2,
-    height: DIVIDER_HEIGHT,
-    backgroundColor: '#E0E3EB',
-    borderRadius: 1,
-    marginHorizontal: 12,
+  cardBody: { flex: 1, paddingTop: 2 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  cardTitle: { fontWeight: '700', flex: 1 },
+  metaBlock: { marginTop: 6, gap: 2 },
+  cardSubtitle: { color: '#555' },
+
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
 
-  cardBody: { flex: 1 },
-  cardTitle: { fontWeight: '600' },
-  cardSubtitle: { color: '#555', marginTop: 2 },
-  cardCaption: { color: '#777', fontSize: 12, marginTop: 2 },
+  occupantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  occupantText: {
+    flex: 1,
+    marginLeft: 6,
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  occupantBlock: {
+    marginTop: 10,
+  },
+  occupantName: {
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  occupantMeta: {
+    color: '#666',
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
+  },
 
   /* ACTION RAIL */
   actionRail: {

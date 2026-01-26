@@ -67,6 +67,35 @@ const fetchActiveTenantForRoom = async (roomId: number) => {
   } as TenantRoomRecord;
 };
 
+const fetchActiveTenantsForRooms = async (roomIds: number[]) => {
+  const ids = Array.from(new Set(roomIds)).filter(Boolean);
+  if (ids.length === 0) return {} as Record<number, TenantRoomRecord | null>;
+
+  const userId = await getCurrentUserId();
+  const tenantMap = await fetchTenantsMap();
+
+  const { data, error } = await supabase
+    .from('tenant_room_mapping')
+    .select('*')
+    .eq('user_id', userId)
+    .in('room_id', ids)
+    .is('leaving_date', null);
+
+  if (error) throw error;
+
+  const map: Record<number, TenantRoomRecord | null> = {};
+  ids.forEach((id) => (map[id] = null));
+
+  (data || []).forEach((r: any) => {
+    map[r.room_id] = {
+      ...r,
+      tenant: tenantMap[r.tenant_id],
+    } as TenantRoomRecord;
+  });
+
+  return map;
+};
+
 /* ===================== TENANT HISTORY ===================== */
 
 const fetchTenantHistoryForRoom = async (roomId: number) => {
@@ -138,6 +167,7 @@ const vacateRoom = async (mappingId: number) => {
 
 export {
   fetchActiveTenantForRoom,
+  fetchActiveTenantsForRooms,
   fetchTenantHistoryForRoom,
   addTenantToRoom,
   vacateRoom,
