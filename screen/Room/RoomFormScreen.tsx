@@ -229,15 +229,46 @@ export default function RoomFormScreen() {
 
               {activeTenant ? (
                 <>
-                  <Text style={{ fontWeight: '700', marginTop: 8 }}>
-                    {activeTenant.tenant.name}
-                  </Text>
-                  <Text style={{ color: '#666' }}>
-                    Joined on {formatDate(activeTenant.joining_date)}
-                  </Text>
+                  <Surface style={styles.occupancyCard} elevation={1}>
+                    <View style={styles.occupancyHeader}>
+                      <Avatar.Text
+                        size={44}
+                        label={getInitials(activeTenant.tenant.name)}
+                        style={{ backgroundColor: theme.colors.primaryContainer }}
+                        color={theme.colors.primary}
+                      />
+
+                      <View style={styles.occupancyHeaderText}>
+                        <Text variant="titleMedium" style={styles.occupancyName}>
+                          {activeTenant.tenant.name}
+                        </Text>
+                        <Text style={styles.occupancySub}>Active tenant</Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.statusPill,
+                          { backgroundColor: theme.colors.secondaryContainer },
+                        ]}
+                      >
+                        <Text style={[styles.statusPillText, { color: theme.colors.secondary }]}>
+                          Occupied
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.occupancyMetaRow}>
+                      <IconButton icon="calendar" size={18} style={styles.metaIcon} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.metaLabel}>Joining date</Text>
+                        <Text style={styles.metaValue}>{formatDate(activeTenant.joining_date)}</Text>
+                      </View>
+                    </View>
+                  </Surface>
 
                   <Button
-                    mode="outlined"
+                    mode="contained-tonal"
+                    icon="home-remove-outline"
                     style={{ marginTop: 12 }}
                     onPress={() =>
                       Alert.alert('Mark Vacant', 'Confirm tenant vacated?', [
@@ -260,15 +291,31 @@ export default function RoomFormScreen() {
                 <>
                   {!selectedTenant && (
                     <>
+                      <Surface style={styles.occupancyHint} elevation={0}>
+                        <Avatar.Icon
+                          size={40}
+                          icon="account-plus-outline"
+                          style={{ backgroundColor: theme.colors.primaryContainer }}
+                          color={theme.colors.primary}
+                        />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={{ fontWeight: '700' }}>No tenant assigned</Text>
+                          <Text style={{ color: '#666', marginTop: 2 }}>
+                            Search and select a tenant to occupy this room.
+                          </Text>
+                        </View>
+                      </Surface>
+
                       <TextInput
                         label="Search Tenant"
                         value={tenantQuery}
                         onChangeText={setTenantQuery}
                         mode="outlined"
+                        left={<TextInput.Icon icon="magnify" />}
                       />
 
                       {filteredTenants.length > 0 && (
-                        <Surface style={styles.dropdown}>
+                        <Surface style={styles.dropdown} elevation={2}>
                           {filteredTenants.map(t => (
                             <TouchableOpacity
                               key={t.id}
@@ -287,12 +334,26 @@ export default function RoomFormScreen() {
                   )}
 
                   {selectedTenant && (
-                    <Surface style={styles.selectedTenant}>
-                      <Avatar.Text size={36} label={getInitials(selectedTenant.name)} />
-                      <Text style={{ flex: 1, marginLeft: 12, fontWeight: '700' }}>
-                        {selectedTenant.name}
-                      </Text>
-                      <IconButton icon="close" onPress={() => setSelectedTenant(null)} />
+                    <Surface style={styles.selectedTenant} elevation={1}>
+                      <Avatar.Text
+                        size={40}
+                        label={getInitials(selectedTenant.name)}
+                        style={{ backgroundColor: theme.colors.primaryContainer }}
+                        color={theme.colors.primary}
+                      />
+
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={{ fontWeight: '800' }}>{selectedTenant.name}</Text>
+                        <Text style={{ color: '#666', marginTop: 2 }}>
+                          Selected tenant
+                        </Text>
+                      </View>
+
+                      <IconButton
+                        icon="close"
+                        onPress={() => setSelectedTenant(null)}
+                        accessibilityLabel="Remove selected tenant"
+                      />
                     </Surface>
                   )}
 
@@ -414,6 +475,65 @@ const styles = StyleSheet.create({
 
   sectionTitle: {
     fontWeight: '600',
+    marginBottom: 12,
+  },
+
+  occupancyCard: {
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 8,
+  },
+  occupancyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  occupancyHeaderText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  occupancyName: {
+    fontWeight: '800',
+  },
+  occupancySub: {
+    color: '#666',
+    marginTop: 2,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  occupancyMetaRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E6E6E6',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaIcon: {
+    margin: 0,
+    marginRight: 6,
+  },
+  metaLabel: {
+    fontSize: 12,
+    color: '#888',
+  },
+  metaValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  occupancyHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#F6F8FF',
     marginBottom: 12,
   },
 
