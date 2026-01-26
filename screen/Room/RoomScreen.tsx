@@ -13,7 +13,6 @@ import {
   Avatar,
   Button,
   FAB,
-  IconButton,
   Surface,
   Text,
 } from 'react-native-paper';
@@ -22,6 +21,9 @@ import { RoomStackParamList } from '../../navigation/StackParam';
 import { deleteRoom, fetchRooms, RoomRecord } from '../../service/RoomService';
 
 type Nav = NativeStackNavigationProp<RoomStackParamList, 'RoomList'>;
+
+const ICON_SIZE = 48;
+const DIVIDER_HEIGHT = ICON_SIZE;
 
 export default function RoomScreen() {
   const navigation = useNavigation<Nav>();
@@ -59,8 +61,6 @@ export default function RoomScreen() {
             setRefreshing(true);
             await deleteRoom(id);
             await loadRooms(true);
-          } catch (err: any) {
-            Alert.alert('Delete Failed', err.message || 'Could not delete room');
           } finally {
             setRefreshing(false);
           }
@@ -72,7 +72,7 @@ export default function RoomScreen() {
   const renderItem = ({ item }: { item: RoomRecord }) => (
     <RoomCard
       item={item}
-      onPress={() => navigation.navigate('RoomView', { roomId: item.id })}
+      onView={() => navigation.navigate('RoomView', { roomId: item.id })}
       onEdit={() =>
         navigation.navigate('RoomForm', { roomId: item.id, mode: 'edit' })
       }
@@ -116,35 +116,49 @@ export default function RoomScreen() {
 
 const RoomCard = ({
   item,
-  onPress,
+  onView,
   onEdit,
   onDelete,
 }: {
   item: RoomRecord;
-  onPress: () => void;
+  onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) => (
-  <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
-    <Surface style={styles.card} elevation={2}>
-      <View style={styles.cardRow}>
-        <Avatar.Icon size={48} icon="home" />
+  <Surface style={styles.card} elevation={2}>
+    <TouchableOpacity
+      style={styles.cardContent}
+      activeOpacity={0.85}
+      onPress={onView}
+    >
+      <Avatar.Icon size={ICON_SIZE} icon="home-outline" />
 
-        <View style={styles.cardBody}>
-          <Text variant="titleMedium" style={styles.cardTitle}>
-            {item.name || '-'}
-          </Text>
-          <Text style={styles.cardSubtitle}>Type: {item.type || '-'}</Text>
-          <Text style={styles.cardCaption}>Rent: ₹{item.rent || '-'}</Text>
-        </View>
+      {/* VERTICAL DIVIDER */}
+      <View style={styles.verticalDivider} />
 
-        <View style={styles.actions}>
-          <IconButton icon="pencil" size={18} onPress={onEdit} />
-          <IconButton icon="delete" size={18} onPress={onDelete} />
-        </View>
+      <View style={styles.cardBody}>
+        <Text variant="titleMedium" style={styles.cardTitle}>
+          {item.name || '-'}
+        </Text>
+        <Text style={styles.cardSubtitle}>
+          Type: {item.type || '-'}
+        </Text>
+        <Text style={styles.cardCaption}>
+          Rent: ₹{item.rent || '-'}
+        </Text>
       </View>
-    </Surface>
-  </TouchableOpacity>
+    </TouchableOpacity>
+
+    {/* ACTION RAIL */}
+    <View style={styles.actionRail}>
+      <TouchableOpacity style={styles.editAction} onPress={onEdit}>
+        <Text style={styles.editText}>Edit</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
+        <Text style={styles.deleteText}>Delete</Text>
+      </TouchableOpacity>
+    </View>
+  </Surface>
 );
 
 /* ---------------- EMPTY ---------------- */
@@ -170,16 +184,77 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6FA' },
   listContent: { padding: 16, paddingBottom: 120 },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  card: { borderRadius: 16, padding: 14, marginBottom: 12 },
-  cardRow: { flexDirection: 'row', alignItems: 'center' },
-  cardBody: { flex: 1, marginLeft: 12 },
+
+  card: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+
+  cardContent: {
+    flex: 1,
+    flexDirection: 'row',
+    padding: 14,
+    alignItems: 'center',
+  },
+
+  verticalDivider: {
+    width: 2,
+    height: DIVIDER_HEIGHT,
+    backgroundColor: '#E0E3EB',
+    borderRadius: 1,
+    marginHorizontal: 12,
+  },
+
+  cardBody: { flex: 1 },
   cardTitle: { fontWeight: '600' },
   cardSubtitle: { color: '#555', marginTop: 2 },
   cardCaption: { color: '#777', fontSize: 12, marginTop: 2 },
-  actions: { flexDirection: 'row' },
+
+  /* ACTION RAIL */
+  actionRail: {
+    width: 72,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'space-between',
+  },
+
+  editAction: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  deleteAction: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FDECEA',
+  },
+
+  editText: {
+    fontWeight: '600',
+    color: '#1A73E8',
+  },
+
+  deleteText: {
+    fontWeight: '600',
+    color: '#D32F2F',
+  },
+
   fab: { position: 'absolute', right: 16, bottom: 24 },
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
   emptyIcon: { marginBottom: 16, backgroundColor: '#E0E0E0' },
   emptyTitle: { fontWeight: '600', marginBottom: 6 },
-  emptySubtitle: { color: '#666', textAlign: 'center', marginBottom: 16 },
+  emptySubtitle: {
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
 });
