@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  TouchableOpacity,
 } from 'react-native';
 import {
   ActivityIndicator,
@@ -17,76 +18,136 @@ import {
   Surface,
   Text,
   TextInput,
+  Button,
+  IconButton,
+  useTheme,
 } from 'react-native-paper';
+import { DatePickerModal } from 'react-native-paper-dates';
+
 import { RoomStackParamList } from '../../navigation/StackParam';
 import { fetchRoomById, saveRoom } from '../../service/RoomService';
+import {
+  addTenantToRoom,
+  fetchActiveTenantForRoom,
+  fetchTenantHistoryForRoom,
+  vacateRoom,
+  TenantRoomRecord,
+  TenantHistoryRecord,
+} from '../../service/TenantRoomService';
+import { fetchTenants, TenantRecord } from '../../service/tenantService';
+
+/* ---------------- TYPES ---------------- */
 
 type Props = NativeStackScreenProps<RoomStackParamList, 'RoomForm'>;
+
+/* ---------------- HELPERS ---------------- */
+
+const formatDate = (d?: string | null) =>
+  d
+    ? new Date(d).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '-';
+
+const getInitials = (name?: string | null) => {
+  const parts = (name || '').trim().split(/\s+/).slice(0, 2);
+  return parts.length ? parts.map(p => p[0]).join('').toUpperCase() : 'R';
+};
+
+/* ---------------- SCREEN ---------------- */
 
 export default function RoomFormScreen() {
   const navigation = useNavigation();
   const route = useRoute<Props['route']>();
+  const theme = useTheme();
 
-  const params = route.params;
-  const mode = params?.mode ?? 'add';
-  const roomId = mode === 'edit' ? params?.roomId : undefined;
+  const mode = route.params?.mode ?? 'add';
+  const roomId = mode === 'edit' ? route.params?.roomId : undefined;
 
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
+  /* ROOM */
   const [name, setName] = React.useState('');
   const [type, setType] = React.useState('');
   const [area, setArea] = React.useState('');
   const [rent, setRent] = React.useState('');
   const [deposit, setDeposit] = React.useState('');
   const [comment, setComment] = React.useState('');
-
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  /* TENANT */
+  const [activeTenant, setActiveTenant] = React.useState<TenantRoomRecord | null>(null);
+  const [tenantHistory, setTenantHistory] = React.useState<TenantHistoryRecord[]>([]);
+  const [allTenants, setAllTenants] = React.useState<TenantRecord[]>([]);
+  const [tenantQuery, setTenantQuery] = React.useState('');
+  const [selectedTenant, setSelectedTenant] = React.useState<TenantRecord | null>(null);
+
+  /* DATE */
+  const [joiningDate, setJoiningDate] = React.useState<Date | null>(null);
+  const [dateModalOpen, setDateModalOpen] = React.useState(false);
+
+  /* ---------------- LOAD ---------------- */
 
   const load = React.useCallback(async () => {
     if (mode !== 'edit' || !roomId) return;
+
     try {
       setLoading(true);
       const r = await fetchRoomById(roomId);
       if (!r) return;
+
       setName(r.name || '');
       setType(r.type || '');
       setArea(r.area || '');
       setRent(r.rent || '');
       setDeposit(r.deposit || '');
       setComment(r.comment || '');
+
+      const [active, history, tenants] = await Promise.all([
+        fetchActiveTenantForRoom(roomId),
+        fetchTenantHistoryForRoom(roomId),
+        fetchTenants(),
+      ]);
+
+      setActiveTenant(active);
+      setTenantHistory(history);
+      setAllTenants(tenants);
     } finally {
       setLoading(false);
     }
   }, [mode, roomId]);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      load();
-    }, [load]),
-  );
+  useFocusEffect(React.useCallback(() => { load(); }, [load]));
+
+  /* ---------------- VALIDATE ---------------- */
 
   const validate = () => {
     const e: Record<string, string> = {};
-
     if (!name.trim()) e.name = 'Required';
     if (!type.trim()) e.type = 'Required';
+    if (!/^\d+$/.test(rent)) e.rent = 'Numbers only';
+    if (!/^\d+$/.test(deposit)) e.deposit = 'Numbers only';
 
-    if (!rent.trim()) e.rent = 'Required';
-    else if (!/^\d+$/.test(rent)) e.rent = 'Numbers only';
-
-    if (!deposit.trim()) e.deposit = 'Required';
-    else if (!/^\d+$/.test(deposit)) e.deposit = 'Numbers only';
+    if (selectedTenant && !joiningDate) {
+      e.joiningDate = 'Joining date is required';
+    }
 
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
+  /* ---------------- SAVE ---------------- */
+
   const save = async () => {
     if (!validate()) return;
+
     try {
       setSaving(true);
-      await saveRoom({
+
+      const savedRoom = await saveRoom({
         id: mode === 'edit' ? roomId : undefined,
         name,
         type,
@@ -95,6 +156,15 @@ export default function RoomFormScreen() {
         deposit,
         comment,
       });
+
+      if (mode === 'edit' && !activeTenant && selectedTenant && joiningDate) {
+        await addTenantToRoom({
+          tenant_id: selectedTenant.id,
+          room_id: savedRoom.id,
+          joining_date: joiningDate.toISOString(),
+        });
+      }
+
       Alert.alert('Saved', 'Room saved successfully', [
         { text: 'OK', onPress: navigation.goBack },
       ]);
@@ -104,153 +174,270 @@ export default function RoomFormScreen() {
   };
 
   if (loading) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <View style={styles.loader}><ActivityIndicator size="large" /></View>;
   }
+
+  const filteredTenants =
+    tenantQuery.length > 0
+      ? allTenants.filter(t =>
+          t.name?.toLowerCase().includes(tenantQuery.toLowerCase()),
+        )
+      : [];
+
+  /* ---------------- UI ---------------- */
 
   return (
     <>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {/* ---------- HERO ---------- */}
-          <Surface style={styles.hero} elevation={3}>
-            <Avatar.Icon size={56} icon="home-city-outline" />
-            <View style={{ marginLeft: 16 }}>
-              <Text variant="titleLarge" style={styles.heroTitle}>
-                {mode === 'edit' ? 'Edit Room' : 'Add Room'}
-              </Text>
-              <Text style={styles.heroSubtitle}>
-                Basic details & financials
-              </Text>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+
+          {/* ===== ROOM DETAILS (ENHANCED) ===== */}
+          <Surface style={styles.roomHero} elevation={2}>
+            <View style={styles.roomHeroHeader}>
+              <Avatar.Icon
+                size={52}
+                icon="home-city-outline"
+                style={{ backgroundColor: theme.colors.primaryContainer }}
+                color={theme.colors.primary}
+              />
+              <View style={{ marginLeft: 14 }}>
+                <Text variant="titleLarge" style={{ fontWeight: '800' }}>
+                  Room Details
+                </Text>
+                <Text style={{ color: '#666' }}>
+                  Configuration & pricing
+                </Text>
+              </View>
+            </View>
+
+            <FormInput label="Room Name *" value={name} onChange={setName} error={errors.name} icon="home-outline" />
+            <FormInput label="Room Type *" value={type} onChange={setType} error={errors.type} icon="shape-outline" />
+            <FormInput label="Area (sq ft)" value={area} onChange={setArea} icon="ruler-square" />
+
+            <View style={styles.moneyRow}>
+              <MoneyInput label="Rent (₹)" value={rent} onChange={setRent} error={errors.rent} />
+              <MoneyInput label="Deposit (₹)" value={deposit} onChange={setDeposit} error={errors.deposit} />
             </View>
           </Surface>
 
-          {/* ---------- PRIMARY DETAILS ---------- */}
-          <Surface style={styles.section} elevation={2}>
-            <SectionTitle title="Room Information" />
+          {/* ===== TENANT OCCUPANCY ===== */}
+          {mode === 'edit' && (
+            <Surface style={styles.section} elevation={2}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Tenant Occupancy
+              </Text>
 
-            <Input label="Room Name *" value={name} onChange={setName} error={errors.name} />
-            <Input label="Type *" value={type} onChange={setType} error={errors.type} />
-            <Input label="Area (sq ft)" value={area} onChange={setArea} />
-          </Surface>
+              {activeTenant ? (
+                <>
+                  <Text style={{ fontWeight: '700', marginTop: 8 }}>
+                    {activeTenant.tenant.name}
+                  </Text>
+                  <Text style={{ color: '#666' }}>
+                    Joined on {formatDate(activeTenant.joining_date)}
+                  </Text>
 
-          {/* ---------- FINANCIAL ---------- */}
-          <Surface style={styles.section} elevation={2}>
-            <SectionTitle title="Financial Details" />
+                  <Button
+                    mode="outlined"
+                    style={{ marginTop: 12 }}
+                    onPress={() =>
+                      Alert.alert('Mark Vacant', 'Confirm tenant vacated?', [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Confirm',
+                          style: 'destructive',
+                          onPress: async () => {
+                            await vacateRoom(activeTenant.id);
+                            load();
+                          },
+                        },
+                      ])
+                    }
+                  >
+                    Mark Vacant
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {!selectedTenant && (
+                    <>
+                      <TextInput
+                        label="Search Tenant"
+                        value={tenantQuery}
+                        onChangeText={setTenantQuery}
+                        mode="outlined"
+                      />
 
-            <Input
-              label="Rent (₹) *"
-              value={rent}
-              onChange={setRent}
-              keyboard="number-pad"
-              error={errors.rent}
-            />
-            <Input
-              label="Deposit (₹) *"
-              value={deposit}
-              onChange={setDeposit}
-              keyboard="number-pad"
-              error={errors.deposit}
-            />
-          </Surface>
+                      {filteredTenants.length > 0 && (
+                        <Surface style={styles.dropdown}>
+                          {filteredTenants.map(t => (
+                            <TouchableOpacity
+                              key={t.id}
+                              style={styles.dropdownItem}
+                              onPress={() => {
+                                setSelectedTenant(t);
+                                setTenantQuery('');
+                              }}
+                            >
+                              <Text>{t.name}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </Surface>
+                      )}
+                    </>
+                  )}
 
-          {/* ---------- NOTES ---------- */}
-          <Surface style={styles.section} elevation={2}>
-            <SectionTitle title="Additional Notes" />
-            <Input label="Comment" value={comment} onChange={setComment} multiline />
-          </Surface>
+                  {selectedTenant && (
+                    <Surface style={styles.selectedTenant}>
+                      <Avatar.Text size={36} label={getInitials(selectedTenant.name)} />
+                      <Text style={{ flex: 1, marginLeft: 12, fontWeight: '700' }}>
+                        {selectedTenant.name}
+                      </Text>
+                      <IconButton icon="close" onPress={() => setSelectedTenant(null)} />
+                    </Surface>
+                  )}
+
+                  <Button
+                    mode="contained-tonal"
+                    icon="calendar"
+                    style={{ marginTop: 12 }}
+                    onPress={() => setDateModalOpen(true)}
+                  >
+                    {joiningDate
+                      ? `Joining Date: ${formatDate(joiningDate.toISOString())}`
+                      : 'Select Joining Date'}
+                  </Button>
+
+                  {!!errors.joiningDate && (
+                    <HelperText type="error" visible>
+                      {errors.joiningDate}
+                    </HelperText>
+                  )}
+                </>
+              )}
+            </Surface>
+          )}
+
+          {/* ===== TENANT HISTORY ===== */}
+          {tenantHistory.length > 0 && (
+            <Surface style={styles.section} elevation={2}>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Tenant History
+              </Text>
+
+              {tenantHistory.map((h, i) => (
+                <Surface key={i} style={styles.historyCard} elevation={1}>
+                  <Avatar.Icon size={36} icon="account" />
+                  <View style={{ marginLeft: 12 }}>
+                    <Text style={{ fontWeight: '600' }}>{h.tenant_name}</Text>
+                    <Text style={{ color: '#666' }}>
+                      {formatDate(h.joining_date)} → {formatDate(h.leaving_date)}
+                    </Text>
+                  </View>
+                </Surface>
+              ))}
+            </Surface>
+          )}
+
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <FAB
-        icon="content-save"
-        style={styles.fab}
-        loading={saving}
-        onPress={save}
+      <FAB icon="content-save" style={styles.fab} loading={saving} onPress={save} />
+
+      <DatePickerModal
+        locale="en"
+        mode="single"
+        visible={dateModalOpen}
+        date={joiningDate ?? new Date()}
+        onDismiss={() => setDateModalOpen(false)}
+        onConfirm={({ date }) => {
+          setDateModalOpen(false);
+          setJoiningDate(date ?? null);
+        }}
       />
     </>
   );
 }
 
-/* ---------------- HELPERS ---------------- */
+/* ---------------- COMPONENTS ---------------- */
 
-const SectionTitle = ({ title }: { title: string }) => (
-  <Text variant="titleMedium" style={styles.sectionTitle}>
-    {title}
-  </Text>
-);
-
-const Input = ({ label, value, onChange, error, keyboard, multiline }: any) => (
+const FormInput = ({ label, value, onChange, error, icon }: any) => (
   <>
     <TextInput
       label={label}
       value={value}
       onChangeText={onChange}
       mode="outlined"
-      keyboardType={keyboard}
-      multiline={multiline}
-      style={{ marginBottom: 6 }}
+      left={<TextInput.Icon icon={icon} />}
       error={!!error}
     />
-    <HelperText type="error" visible={!!error}>
-      {error || ' '}
-    </HelperText>
+    <HelperText type="error" visible={!!error}>{error || ' '}</HelperText>
   </>
+);
+
+const MoneyInput = ({ label, value, onChange, error }: any) => (
+  <View style={{ flex: 1 }}>
+    <TextInput
+      label={label}
+      value={value}
+      onChangeText={onChange}
+      mode="outlined"
+      keyboardType="number-pad"
+      left={<TextInput.Icon icon="currency-inr" />}
+      error={!!error}
+    />
+    <HelperText type="error" visible={!!error}>{error || ' '}</HelperText>
+  </View>
 );
 
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
-  scroll: {
-    flex: 1,
-    backgroundColor: '#F4F6FA',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 16,
-    paddingBottom: 120,
-  },
+  container: { padding: 16, paddingBottom: 120, backgroundColor: '#F4F6FA' },
+  section: { borderRadius: 16, padding: 16, marginBottom: 16 },
+  fab: { position: 'absolute', right: 16, bottom: 24 },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  hero: {
-    borderRadius: 18,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  heroTitle: {
-    fontWeight: '700',
-  },
-  heroSubtitle: {
-    color: '#666',
-    marginTop: 4,
-  },
-
-  section: {
+  roomHero: {
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
   },
+  roomHeroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  moneyRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
   sectionTitle: {
     fontWeight: '600',
     marginBottom: 12,
   },
 
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 24,
+  dropdown: {
+    marginTop: 6,
+    borderRadius: 8,
   },
-
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
+  dropdownItem: {
+    padding: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DDD',
+  },
+  selectedTenant: {
+    flexDirection: 'row',
     alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  historyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginTop: 8,
+    borderRadius: 14,
   },
 });
