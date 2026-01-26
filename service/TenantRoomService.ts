@@ -19,6 +19,12 @@ export type TenantHistoryRecord = {
   last_rent_paid: number | null;
 };
 
+export type ActiveTenantAssignment = {
+  tenant_id: number;
+  room_id: number;
+  joining_date: string;
+};
+
 /* ===================== AUTH ===================== */
 
 const getCurrentUserId = async () => {
@@ -96,6 +102,38 @@ const fetchActiveTenantsForRooms = async (roomIds: number[]) => {
   return map;
 };
 
+const fetchActiveRoomForTenants = async (tenantIds: number[]) => {
+  const ids = Array.from(new Set(tenantIds)).filter(Boolean);
+  if (ids.length === 0) return {} as Record<number, ActiveTenantAssignment | null>;
+
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('tenant_room_mapping')
+    .select('tenant_id, room_id, joining_date')
+    .eq('user_id', userId)
+    .in('tenant_id', ids)
+    .is('leaving_date', null);
+
+  if (error) throw error;
+
+  const map: Record<number, ActiveTenantAssignment | null> = {};
+  ids.forEach((id) => (map[id] = null));
+
+  (data || []).forEach((r: any) => {
+    // If multiple active rows exist unexpectedly, keep the first encountered
+    if (!map[r.tenant_id]) {
+      map[r.tenant_id] = {
+        tenant_id: r.tenant_id,
+        room_id: r.room_id,
+        joining_date: r.joining_date,
+      } as ActiveTenantAssignment;
+    }
+  });
+
+  return map;
+};
+
 /* ===================== TENANT HISTORY ===================== */
 
 const fetchTenantHistoryForRoom = async (roomId: number) => {
@@ -168,6 +206,7 @@ const vacateRoom = async (mappingId: number) => {
 export {
   fetchActiveTenantForRoom,
   fetchActiveTenantsForRooms,
+  fetchActiveRoomForTenants,
   fetchTenantHistoryForRoom,
   addTenantToRoom,
   vacateRoom,

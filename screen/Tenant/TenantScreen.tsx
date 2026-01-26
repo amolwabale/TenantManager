@@ -20,10 +20,21 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { TenantStackParamList } from '../../navigation/StackParam';
 import { deleteTenant, fetchTenants, TenantRecord } from '../../service/tenantService';
 import { supabase } from '../../service/SupabaseClient';
+import { fetchRooms } from '../../service/RoomService';
+import { fetchActiveRoomForTenants } from '../../service/TenantRoomService';
 
 type Nav = NativeStackNavigationProp<TenantStackParamList, 'TenantList'>;
 
 const AVATAR_SIZE = 52;
+
+const formatDate = (d?: string | null) =>
+  d
+    ? new Date(d).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '-';
 
 export default function TenantScreen() {
   const navigation = useNavigation<Nav>();
@@ -32,6 +43,9 @@ export default function TenantScreen() {
   const [refreshing, setRefreshing] = React.useState(false);
   const [tenants, setTenants] = React.useState<TenantRecord[]>([]);
   const [signedUrls, setSignedUrls] = React.useState<Record<number, string>>({});
+  const [assignmentByTenant, setAssignmentByTenant] = React.useState<
+    Record<number, { roomName?: string; joiningDate?: string } | null>
+  >({});
 
   const createSignedUrl = async (fullUrl?: string | null) => {
     if (!fullUrl) return undefined;
@@ -54,6 +68,32 @@ export default function TenantScreen() {
       const data = await fetchTenants();
       setTenants(data || []);
       generateSignedUrls(data || []);
+
+      // room assignment for each tenant (active mapping = leaving_date is null)
+      const tenantIds = (data || []).map((t) => t.id);
+      const [rooms, activeMap] = await Promise.all([
+        fetchRooms(),
+        fetchActiveRoomForTenants(tenantIds),
+      ]);
+
+      const roomNameById: Record<number, string> = {};
+      (rooms || []).forEach((r: any) => {
+        if (r?.id != null) roomNameById[r.id] = r.name || '-';
+      });
+
+      const viewMap: Record<number, { roomName?: string; joiningDate?: string } | null> = {};
+      tenantIds.forEach((id) => {
+        const a = activeMap?.[id];
+        if (!a) {
+          viewMap[id] = null;
+          return;
+        }
+        viewMap[id] = {
+          roomName: roomNameById[a.room_id] || '-',
+          joiningDate: a.joining_date,
+        };
+      });
+      setAssignmentByTenant(viewMap);
     } finally {
       isRefresh ? setRefreshing(false) : setInitialLoading(false);
     }
@@ -94,6 +134,7 @@ export default function TenantScreen() {
     <TenantCard
       item={item}
       photoUrl={signedUrls[item.id]}
+      assignment={assignmentByTenant[item.id]}
       onView={() => navigation.navigate('TenantView', { tenantId: item.id })}
       onEdit={() =>
         navigation.navigate('TenantForm', { tenantId: item.id, mode: 'edit' })
@@ -134,12 +175,14 @@ export default function TenantScreen() {
 const TenantCard = ({
   item,
   photoUrl,
+  assignment,
   onView,
   onEdit,
   onDelete,
 }: {
   item: TenantRecord;
   photoUrl?: string;
+  assignment?: { roomName?: string; joiningDate?: string } | null;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -155,9 +198,12 @@ const TenantCard = ({
         <Text variant="titleMedium" style={styles.cardTitle}>
           {item.name || '-'}
         </Text>
-        <Text style={styles.cardSubtitle}>{item.mobile || '-'}</Text>
-        <Text style={styles.cardCaption}>
-          Family Members: {item.total_family_members || '-'}
+        <Text style={styles.cardSubtitle} numberOfLines={1}>
+          Room: {assignment?.roomName ? assignment.roomName : 'Not assigned'}
+        </Text>
+        <Text style={styles.cardCaption} numberOfLines={1}>
+          Joined on:{' '}
+          {assignment?.joiningDate ? formatDate(assignment.joiningDate) : 'Not assigned'}
         </Text>
       </View>
     </TouchableOpacity>
@@ -194,22 +240,23 @@ const styles = StyleSheet.create({
   cardContent: {
     flex: 1,
     flexDirection: 'row',
-    padding: 14,
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    alignItems: 'flex-start',
   },
 
   verticalDivider: {
     width: 1.5,
-    height: AVATAR_SIZE,
+    height: 65,
     backgroundColor: '#cccccc',
     borderRadius: 1,
     marginHorizontal: 12,
   },
 
-  cardBody: { flex: 1 },
-  cardTitle: { fontWeight: '600' },
-  cardSubtitle: { color: '#555', marginTop: 2 },
-  cardCaption: { color: '#777', fontSize: 12, marginTop: 2 },
+  cardBody: { flex: 1, paddingTop: 2 },
+  cardTitle: { fontWeight: '700' },
+  cardSubtitle: { color: '#555', marginTop: 4, fontWeight: '600' },
+  cardCaption: { color: '#777', fontSize: 12, marginTop: 4, lineHeight: 16 },
 
   /* ACTION RAIL */
   actionRail: {
