@@ -209,110 +209,111 @@ const RoomCard = ({
   onDelete: () => void;
 }) => (
   <Surface style={styles.card} elevation={2}>
-    <TouchableOpacity
-      style={styles.cardContent}
-      activeOpacity={0.85}
-      onPress={onView}
-    >
-      <View style={styles.leadingColumn}>
-        <View
-          style={[
-            styles.leadingIcon,
-            { backgroundColor: themeColors.primaryContainer },
-          ]}
-        >
-          <Avatar.Icon
-            size={ICON_SIZE}
-            icon="home-outline"
-            style={{ backgroundColor: 'transparent' }}
-            color={themeColors.primary}
-          />
-        </View>
-
-        <View style={styles.occupantAvatarWrap}>
-          {occupant ? (
-            occupantPhotoUrl ? (
-              <Avatar.Image size={30} source={{ uri: occupantPhotoUrl }} />
-            ) : (
-              <Avatar.Text
-                size={30}
-                label={getInitials(occupant.tenant?.name)}
-                style={{ backgroundColor: themeColors.secondaryContainer }}
-                color={themeColors.secondary}
-              />
-            )
-          ) : (
-            <Avatar.Icon
-              size={30}
-              icon="account-off-outline"
-              style={{ backgroundColor: '#EDEFF5' }}
-              color="#5B6475"
-            />
-          )}
-        </View>
-      </View>
-
-      <View style={styles.cardBody}>
-        <View style={styles.titleRow}>
-          <Text variant="titleMedium" style={styles.cardTitle} numberOfLines={1}>
-            {item.name || '-'}
-          </Text>
-
+    <View style={styles.cardClip}>
+      <TouchableOpacity
+        style={styles.cardContent}
+        activeOpacity={0.85}
+        onPress={onView}
+      >
+        <View style={styles.leadingColumn}>
           <View
             style={[
-              styles.statusPill,
-              {
-                backgroundColor: occupant
-                  ? themeColors.secondaryContainer
-                  : '#EDEFF5',
-              },
+              styles.leadingIcon,
+              { backgroundColor: themeColors.primaryContainer },
             ]}
           >
-            <Text
+            <Avatar.Icon
+              size={ICON_SIZE}
+              icon="home-outline"
+              style={{ backgroundColor: 'transparent' }}
+              color={themeColors.primary}
+            />
+          </View>
+
+          <View style={styles.occupantAvatarWrap}>
+            {occupant ? (
+              occupantPhotoUrl ? (
+                <Avatar.Image size={30} source={{ uri: occupantPhotoUrl }} />
+              ) : (
+                <Avatar.Text
+                  size={30}
+                  label={getInitials(occupant.tenant?.name)}
+                  style={{ backgroundColor: themeColors.secondaryContainer }}
+                  color={themeColors.secondary}
+                />
+              )
+            ) : (
+              <Avatar.Icon
+                size={30}
+                icon="account-off-outline"
+                style={{ backgroundColor: '#EDEFF5' }}
+                color="#5B6475"
+              />
+            )}
+          </View>
+        </View>
+
+        <View style={styles.cardBody}>
+          <View style={styles.titleRow}>
+            <Text variant="titleMedium" style={styles.cardTitle} numberOfLines={1}>
+              {item.name || '-'}
+            </Text>
+
+            <View
               style={[
-                styles.statusText,
-                { color: occupant ? themeColors.secondary : '#5B6475' },
+                styles.statusPill,
+                {
+                  backgroundColor: occupant
+                    ? themeColors.secondaryContainer
+                    : '#EDEFF5',
+                },
               ]}
             >
-              {occupant ? 'Occupied' : 'Vacant'}
-            </Text>
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: occupant ? themeColors.secondary : '#5B6475' },
+                ]}
+              >
+                {occupant ? 'Occupied' : 'Vacant'}
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.metaBlock}>
-          
-          <Text style={styles.cardSubtitle} numberOfLines={1}>
-            Rent: ₹{item.rent || '-'} | Deposit: ₹{item.deposit || '-'}
-          </Text>
-        </View>
+          <View style={styles.metaBlock}>
+            <Text style={styles.cardSubtitle} numberOfLines={1}>
+              Rent: ₹{item.rent || '-'} | Deposit: ₹{item.deposit || '-'}
+            </Text>
+          </View>
 
-        {occupant ? (
-          <View style={styles.occupantBlock}>
-            <Text style={styles.occupantName} numberOfLines={1}>
-              {occupant.tenant?.name || 'Tenant'}
-            </Text>
-            <Text style={styles.occupantMeta} numberOfLines={1}>
-              Joined on {formatDate(occupant.joining_date)}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.occupantBlock}>
-            <Text style={styles.occupantMeta} numberOfLines={1}>
-              No tenant assigned
-            </Text>
-          </View>
-        )}
+          {occupant ? (
+            <View style={styles.occupantBlock}>
+              <Text style={styles.occupantName} numberOfLines={1}>
+                {occupant.tenant?.name || 'Tenant'}
+              </Text>
+              <Text style={styles.occupantMeta} numberOfLines={1}>
+                Joined on {formatDate(occupant.joining_date)}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.occupantBlock}>
+              <Text style={styles.occupantMeta} numberOfLines={1}>
+                No tenant assigned
+              </Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+
+      {/* ACTION RAIL */}
+      <View style={styles.actionRail}>
+        <TouchableOpacity style={styles.editAction} onPress={onEdit}>
+          <Text style={styles.editText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
+          <Text style={styles.deleteText}>Delete</Text>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
-
-    {/* ACTION RAIL */}
-    <View style={styles.actionRail}>
-      <TouchableOpacity style={styles.editAction} onPress={onEdit}>
-        <Text style={styles.editText}>Edit</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
-        <Text style={styles.deleteText}>Delete</Text>
-      </TouchableOpacity>
     </View>
   </Surface>
 );
@@ -342,9 +343,14 @@ const styles = StyleSheet.create({
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   card: {
-    flexDirection: 'row',
     borderRadius: 16,
     marginBottom: 12,
+  },
+
+  // Keep shadows on Surface; clip inside wrapper instead.
+  cardClip: {
+    flexDirection: 'row',
+    borderRadius: 16,
     overflow: 'hidden',
   },
 

@@ -188,34 +188,36 @@ const TenantCard = ({
   onDelete: () => void;
 }) => (
   <Surface style={styles.card} elevation={2}>
-    <TouchableOpacity style={styles.cardContent} activeOpacity={0.85} onPress={onView}>
-      <AvatarDisplay uri={photoUrl} size={AVATAR_SIZE} />
+    <View style={styles.cardClip}>
+      <TouchableOpacity style={styles.cardContent} activeOpacity={0.85} onPress={onView}>
+        <AvatarDisplay uri={photoUrl} size={AVATAR_SIZE} />
 
-      {/* VERTICAL DIVIDER */}
-      <View style={styles.verticalDivider} />
+        {/* VERTICAL DIVIDER */}
+        <View style={styles.verticalDivider} />
 
-      <View style={styles.cardBody}>
-        <Text variant="titleMedium" style={styles.cardTitle}>
-          {item.name || '-'}
-        </Text>
-        <Text style={styles.cardSubtitle} numberOfLines={1}>
-          Room: {assignment?.roomName ? assignment.roomName : 'Not assigned'}
-        </Text>
-        <Text style={styles.cardCaption} numberOfLines={1}>
-          Joined on:{' '}
-          {assignment?.joiningDate ? formatDate(assignment.joiningDate) : 'Not assigned'}
-        </Text>
+        <View style={styles.cardBody}>
+          <Text variant="titleMedium" style={styles.cardTitle}>
+            {item.name || '-'}
+          </Text>
+          <Text style={styles.cardSubtitle} numberOfLines={1}>
+            Room: {assignment?.roomName ? assignment.roomName : 'Not assigned'}
+          </Text>
+          <Text style={styles.cardCaption} numberOfLines={1}>
+            Joined on:{' '}
+            {assignment?.joiningDate ? formatDate(assignment.joiningDate) : 'Not assigned'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* ACTION RAIL */}
+      <View style={styles.actionRail}>
+        <TouchableOpacity style={styles.editAction} onPress={onEdit}>
+          <Text style={styles.editText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
+          <Text style={styles.deleteText}>Delete</Text>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
-
-    {/* ACTION RAIL */}
-    <View style={styles.actionRail}>
-      <TouchableOpacity style={styles.editAction} onPress={onEdit}>
-        <Text style={styles.editText}>Edit</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.deleteAction} onPress={onDelete}>
-        <Text style={styles.deleteText}>Delete</Text>
-      </TouchableOpacity>
     </View>
   </Surface>
 );
@@ -231,9 +233,14 @@ const styles = StyleSheet.create({
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   card: {
-    flexDirection: 'row',
     borderRadius: 16,
     marginBottom: 12,
+  },
+
+  // Keep shadows on Surface; clip inside wrapper instead.
+  cardClip: {
+    flexDirection: 'row',
+    borderRadius: 16,
     overflow: 'hidden',
   },
 
