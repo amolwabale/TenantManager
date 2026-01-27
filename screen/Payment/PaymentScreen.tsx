@@ -17,7 +17,8 @@ import {
 } from 'react-native-paper';
 import { fetchBills, BillRecord } from '../../service/BillService';
 import { fetchRooms } from '../../service/RoomService';
-import { fetchTenants } from '../../service/tenantService';
+import { fetchTenants, TenantRecord } from '../../service/tenantService';
+import { supabase } from '../../service/SupabaseClient';
 
 const formatMoney = (n?: number | null) => `₹${Math.round(n || 0)}`;
 const formatDate = (d?: string | null) =>
@@ -29,6 +30,8 @@ const formatDate = (d?: string | null) =>
       })
     : '-';
 
+const AVATAR_SIZE = 48;
+
 export default function PaymentScreen() {
   const navigation = useNavigation<any>();
 
@@ -37,6 +40,41 @@ export default function PaymentScreen() {
   const [bills, setBills] = React.useState<BillRecord[]>([]);
   const [tenantNameById, setTenantNameById] = React.useState<Record<number, string>>({});
   const [roomNameById, setRoomNameById] = React.useState<Record<number, string>>({});
+  const [tenantPhotoById, setTenantPhotoById] = React.useState<Record<number, string>>({});
+
+  // same approach as Tenant list screen (signed URLs for private bucket)
+  const createSignedUrl = async (fullUrl?: string | null) => {
+    if (!fullUrl) return undefined;
+    const marker = '/tenant-manager/';
+    const index = fullUrl.indexOf(marker);
+    if (index === -1) return undefined;
+    const filePath = fullUrl.substring(index + marker.length);
+
+    const { data, error } = await supabase.storage
+      .from('tenant-manager')
+      .createSignedUrl(filePath, 60 * 60);
+
+    if (error) return undefined;
+    return data.signedUrl;
+  };
+
+  const generateSignedUrls = async (tenants: TenantRecord[], billRows: BillRecord[]) => {
+    const usedTenantIds = new Set<number>();
+    (billRows || []).forEach((b) => {
+      if (b.tenant_id != null) usedTenantIds.add(b.tenant_id);
+    });
+
+    const map: Record<number, string> = {};
+    await Promise.all(
+      (tenants || [])
+        .filter((t) => usedTenantIds.has(t.id))
+        .map(async (t) => {
+          const signed = await createSignedUrl((t as any).profile_photo_url);
+          if (signed) map[t.id] = signed;
+        }),
+    );
+    setTenantPhotoById(map);
+  };
 
   const load = React.useCallback(async (isRefresh = false) => {
     try {
@@ -60,6 +98,7 @@ export default function PaymentScreen() {
       setRoomNameById(roomMap);
       setTenantNameById(tenantMap);
       setBills(billRows || []);
+      generateSignedUrls((tenants || []) as any, (billRows || []) as any);
     } catch (e: any) {
       Alert.alert('Load Failed', e.message || 'Could not load payments');
     } finally {
@@ -78,6 +117,8 @@ export default function PaymentScreen() {
       item={item}
       roomName={item.room_id != null ? roomNameById[item.room_id] : '-'}
       tenantName={item.tenant_id != null ? tenantNameById[item.tenant_id] : '-'}
+      photoUrl={item.tenant_id != null ? tenantPhotoById[item.tenant_id] : undefined}
+      onPress={() => navigation.navigate('PaymentView', { billId: item.id })}
     />
   );
 
@@ -112,15 +153,19 @@ const PaymentCard = ({
   item,
   roomName,
   tenantName,
+  photoUrl,
+  onPress,
 }: {
   item: BillRecord;
   roomName: string;
   tenantName: string;
+  photoUrl?: string;
+  onPress: () => void;
 }) => (
   <Surface style={styles.card} elevation={2}>
     <View style={styles.cardClip}>
-      <TouchableOpacity style={styles.cardContent} activeOpacity={0.85}>
-        <Avatar.Icon size={48} icon="receipt-text-outline" />
+      <TouchableOpacity style={styles.cardContent} activeOpacity={0.85} onPress={onPress}>
+        <AvatarDisplay uri={photoUrl} size={AVATAR_SIZE} />
 
         <View style={styles.verticalDivider} />
 
@@ -143,6 +188,9 @@ const PaymentCard = ({
     </View>
   </Surface>
 );
+
+const AvatarDisplay = ({ uri, size }: { uri?: string; size: number }) =>
+  uri ? <Avatar.Image size={size} source={{ uri }} /> : <Avatar.Icon size={size} icon="account" />;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F6FA' },

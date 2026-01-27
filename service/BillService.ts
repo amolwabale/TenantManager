@@ -54,6 +54,20 @@ export async function fetchBills(): Promise<BillRecord[]> {
   return (data || []) as any;
 }
 
+export async function fetchBillById(billId: number): Promise<BillRecord | null> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('bill')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', billId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data || null) as any;
+}
+
 export async function createBill(payload: CreateBillPayload): Promise<BillRecord> {
   const userId = await getCurrentUserId();
 

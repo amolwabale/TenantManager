@@ -20,3 +20,9 @@ export type RoomStackParamList = {
   RoomView: { roomId: number; };
   RoomForm: { mode: 'add' | 'edit'; roomId?: number };
 };
+
+export type PaymentStackParamList = {
+  PaymentList: undefined;
+  PaymentView: { billId: number };
+  PaymentForm: undefined;
+};
