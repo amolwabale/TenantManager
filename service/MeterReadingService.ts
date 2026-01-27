@@ -10,6 +10,42 @@ export type MeterReadingRow = {
   id: number;
 };
 
+export type MeterReadingLite = {
+  id: number;
+  unit: number | null;
+};
+
+export async function fetchLatestMeterReading(params: {
+  roomId: number;
+  tenantId: number;
+}): Promise<MeterReadingLite | null> {
+  const { data, error } = await supabase
+    .from('meter_reading')
+    .select('id, unit, created_at')
+    .eq('room_id', params.roomId)
+    .eq('tenant_id', params.tenantId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? (data as any) : null;
+}
+
+export async function updateMeterReading(params: {
+  id: number;
+  unit: number;
+}) {
+  // Some DBs have meter_reading.user_id as uuid, others as numeric.
+  // Updating only unit is safe and avoids user_id mismatch.
+  const { error } = await supabase
+    .from('meter_reading')
+    .update({ unit: params.unit })
+    .eq('id', params.id);
+
+  if (error) throw error;
+}
+
 /**
  * Inserts a meter reading row for a room + tenant.
  *

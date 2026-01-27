@@ -30,12 +30,18 @@ import {
   addTenantToRoom,
   fetchActiveTenantForRoom,
   fetchTenantHistoryForRoom,
+  updateJoiningDate,
   vacateRoom,
   TenantRoomRecord,
   TenantHistoryRecord,
 } from '../../service/TenantRoomService';
 import { fetchTenants, TenantRecord } from '../../service/tenantService';
-import { createMeterReading, deleteMeterReading } from '../../service/MeterReadingService';
+import {
+  createMeterReading,
+  deleteMeterReading,
+  fetchLatestMeterReading,
+  updateMeterReading,
+} from '../../service/MeterReadingService';
 
 /* ---------------- TYPES ---------------- */
 
@@ -85,6 +91,7 @@ export default function RoomFormScreen() {
   const [allTenants, setAllTenants] = React.useState<TenantRecord[]>([]);
   const [tenantQuery, setTenantQuery] = React.useState('');
   const [selectedTenant, setSelectedTenant] = React.useState<TenantRecord | null>(null);
+  const [editingOccupancy, setEditingOccupancy] = React.useState(false);
 
   /* DATE */
   const [joiningDate, setJoiningDate] = React.useState<Date | null>(null);
@@ -92,6 +99,8 @@ export default function RoomFormScreen() {
 
   /* METER READING */
   const [meterReading, setMeterReading] = React.useState('');
+  const [meterReadingId, setMeterReadingId] = React.useState<number | null>(null);
+  const [meterReadingPrevUnit, setMeterReadingPrevUnit] = React.useState<number | null>(null);
 
   /* ---------------- LOAD ---------------- */
 
@@ -119,6 +128,12 @@ export default function RoomFormScreen() {
         setActiveTenant(active);
         setTenantHistory(history);
         setAllTenants(tenants);
+        setEditingOccupancy(false);
+        setSelectedTenant(null);
+        setJoiningDate(null);
+        setTenantQuery('');
+        setMeterReadingId(null);
+        setMeterReadingPrevUnit(null);
       } else {
         // Add mode: still need tenants list for search/selection
         setActiveTenant(null);
@@ -126,6 +141,10 @@ export default function RoomFormScreen() {
         setSelectedTenant(null);
         setJoiningDate(null);
         setMeterReading('');
+        setEditingOccupancy(false);
+        setTenantQuery('');
+        setMeterReadingId(null);
+        setMeterReadingPrevUnit(null);
         const tenants = await fetchTenants();
         setAllTenants(tenants);
       }
@@ -179,24 +198,87 @@ export default function RoomFormScreen() {
         comment,
       });
 
-      if (!activeTenant && selectedTenant && joiningDate) {
+      const shouldApplyOccupancy =
+        !!selectedTenant &&
+        !!joiningDate &&
+        (!activeTenant || editingOccupancy);
+
+      if (shouldApplyOccupancy) {
         const meterUnit = Number(meterReading);
-        const readingRow = await createMeterReading({
-          roomId: savedRoom.id,
-          tenantId: selectedTenant.id,
-          unit: meterUnit,
-        });
+        // For edit-occupancy same tenant: update existing meter_reading row (no new row).
+        // Otherwise: create a new meter_reading row and roll it back on failure.
+        const isEditSameTenant =
+          !!activeTenant &&
+          editingOccupancy &&
+          selectedTenant!.id === activeTenant.tenant_id;
+
+        const createdReadingRow = isEditSameTenant
+          ? null
+          : await createMeterReading({
+              roomId: savedRoom.id,
+              tenantId: selectedTenant!.id,
+              unit: meterUnit,
+            });
 
         try {
-          await addTenantToRoom({
-            tenant_id: selectedTenant.id,
-            room_id: savedRoom.id,
-            joining_date: joiningDate.toISOString(),
-          });
+          if (activeTenant && editingOccupancy) {
+            // Edit existing occupancy
+            if (selectedTenant!.id === activeTenant.tenant_id) {
+              if (meterReadingId) {
+                await updateMeterReading({ id: meterReadingId, unit: meterUnit });
+              } else {
+                // If no existing reading found, create one
+                await createMeterReading({
+                  roomId: savedRoom.id,
+                  tenantId: selectedTenant!.id,
+                  unit: meterUnit,
+                });
+              }
+
+              // Same tenant: update joining date on mapping
+              await updateJoiningDate(activeTenant.id, joiningDate!.toISOString());
+            } else {
+              // Different tenant: vacate current and create new mapping
+              await vacateRoom(activeTenant.id);
+              await addTenantToRoom({
+                tenant_id: selectedTenant!.id,
+                room_id: savedRoom.id,
+                joining_date: joiningDate!.toISOString(),
+              });
+            }
+          } else {
+            // No active tenant: create new mapping
+            await addTenantToRoom({
+              tenant_id: selectedTenant!.id,
+              room_id: savedRoom.id,
+              joining_date: joiningDate!.toISOString(),
+            });
+          }
         } catch (err) {
           // rollback meter reading if mapping fails
-          await deleteMeterReading(readingRow.id);
+          if (createdReadingRow?.id) {
+            await deleteMeterReading(createdReadingRow.id);
+          } else if (isEditSameTenant && meterReadingId && meterReadingPrevUnit != null) {
+            // restore previous unit if we updated an existing row
+            try {
+              await updateMeterReading({ id: meterReadingId, unit: meterReadingPrevUnit });
+            } catch {
+              // ignore rollback failure
+            }
+          }
           throw err;
+        } finally {
+          // reset edit state after occupancy changes
+          if (editingOccupancy) {
+            setEditingOccupancy(false);
+            setSelectedTenant(null);
+            setJoiningDate(null);
+            setMeterReading('');
+            setTenantQuery('');
+            setMeterReadingId(null);
+            setMeterReadingPrevUnit(null);
+            load();
+          }
         }
       }
 
@@ -261,7 +343,7 @@ export default function RoomFormScreen() {
               Tenant Occupancy
             </Text>
 
-            {activeTenant ? (
+            {activeTenant && !editingOccupancy ? (
               <>
                 <Surface style={styles.occupancyCard} elevation={1}>
                   <View style={styles.occupancyHeader}>
@@ -299,6 +381,38 @@ export default function RoomFormScreen() {
                     </View>
                   </View>
                 </Surface>
+
+                <Button
+                  mode="outlined"
+                  icon="pencil-outline"
+                  style={{ marginTop: 12 }}
+                  onPress={async () => {
+                    setEditingOccupancy(true);
+                    setSelectedTenant(activeTenant.tenant);
+                    setJoiningDate(new Date(activeTenant.joining_date));
+                    try {
+                      const latest = await fetchLatestMeterReading({
+                        roomId: roomId as number,
+                        tenantId: activeTenant.tenant_id,
+                      });
+                      setMeterReading(latest?.unit != null ? String(latest.unit) : '');
+                      setMeterReadingId(latest?.id ?? null);
+                      setMeterReadingPrevUnit(latest?.unit ?? null);
+                    } catch {
+                      setMeterReading('');
+                      setMeterReadingId(null);
+                      setMeterReadingPrevUnit(null);
+                    }
+                    setTenantQuery('');
+                    setErrors((prev) => ({
+                      ...prev,
+                      meterReading: '',
+                      joiningDate: '',
+                    }));
+                  }}
+                >
+                  Edit Occupancy
+                </Button>
 
                 <Button
                   mode="contained-tonal"
@@ -430,6 +544,35 @@ export default function RoomFormScreen() {
                   <HelperText type="error" visible>
                     {errors.joiningDate}
                   </HelperText>
+                )}
+
+                {editingOccupancy && activeTenant && (
+                  <Button
+                    mode="outlined"
+                    icon="close"
+                    onPress={() => {
+                      setEditingOccupancy(false);
+                      setSelectedTenant(null);
+                      setJoiningDate(null);
+                      setMeterReading('');
+                      setTenantQuery('');
+                      setMeterReadingId(null);
+                      setMeterReadingPrevUnit(null);
+                      setErrors((prev) => ({
+                        ...prev,
+                        meterReading: '',
+                        joiningDate: '',
+                      }));
+                    }}
+                    textColor="#D32F2F"
+                    style={{
+                      marginTop: 12,
+                      borderColor: '#F3B5B5',
+                      backgroundColor: '#FFF5F5',
+                    }}
+                  >
+                    Cancel occupancy edit
+                  </Button>
                 )}
               </>
             )}

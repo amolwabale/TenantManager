@@ -201,6 +201,20 @@ const vacateRoom = async (mappingId: number) => {
   if (error) throw error;
 };
 
+const updateJoiningDate = async (mappingId: number, joining_date: string) => {
+  const userId = await getCurrentUserId();
+
+  const { error } = await supabase
+    .from('tenant_room_mapping')
+    .update({
+      joining_date,
+    })
+    .eq('id', mappingId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+};
+
 /* ===================== EXPORTS ===================== */
 
 export {
@@ -210,4 +224,5 @@ export {
   fetchTenantHistoryForRoom,
   addTenantToRoom,
   vacateRoom,
+  updateJoiningDate,
 };
