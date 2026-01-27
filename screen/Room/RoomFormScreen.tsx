@@ -101,6 +101,7 @@ export default function RoomFormScreen() {
   const [meterReading, setMeterReading] = React.useState('');
   const [meterReadingId, setMeterReadingId] = React.useState<number | null>(null);
   const [meterReadingPrevUnit, setMeterReadingPrevUnit] = React.useState<number | null>(null);
+  const [activeMeterUnit, setActiveMeterUnit] = React.useState<number | null>(null);
 
   /* ---------------- LOAD ---------------- */
 
@@ -134,6 +135,20 @@ export default function RoomFormScreen() {
         setTenantQuery('');
         setMeterReadingId(null);
         setMeterReadingPrevUnit(null);
+        setActiveMeterUnit(null);
+
+        // Show meter reading in view mode (above joining date)
+        if (active) {
+          try {
+            const latest = await fetchLatestMeterReading({
+              roomId,
+              tenantId: active.tenant_id,
+            });
+            setActiveMeterUnit(latest?.unit ?? null);
+          } catch {
+            setActiveMeterUnit(null);
+          }
+        }
       } else {
         // Add mode: still need tenants list for search/selection
         setActiveTenant(null);
@@ -145,6 +160,7 @@ export default function RoomFormScreen() {
         setTenantQuery('');
         setMeterReadingId(null);
         setMeterReadingPrevUnit(null);
+        setActiveMeterUnit(null);
         const tenants = await fetchTenants();
         setAllTenants(tenants);
       }
@@ -374,10 +390,22 @@ export default function RoomFormScreen() {
                   </View>
 
                   <View style={styles.occupancyMetaRow}>
-                    <IconButton icon="calendar" size={18} style={styles.metaIcon} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.metaLabel}>Joining date</Text>
-                      <Text style={styles.metaValue}>{formatDate(activeTenant.joining_date)}</Text>
+                    <View style={styles.metaRow}>
+                      <IconButton icon="counter" size={18} style={styles.metaIcon} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.metaLabel}>Joining Meter reading</Text>
+                        <Text style={styles.metaValue}>
+                          {activeMeterUnit != null ? String(activeMeterUnit) : '-'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.metaRow, { marginTop: 10 }]}>
+                      <IconButton icon="calendar" size={18} style={styles.metaIcon} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.metaLabel}>Joining date</Text>
+                        <Text style={styles.metaValue}>{formatDate(activeTenant.joining_date)}</Text>
+                      </View>
                     </View>
                   </View>
                 </Surface>
@@ -508,7 +536,7 @@ export default function RoomFormScreen() {
                 {selectedTenant && (
                   <>
                     <TextInput
-                      label="Meter Reading *"
+                      label="Joining Meter Reading *"
                       value={meterReading}
                       onChangeText={(text) => {
                         const next = text.replace(/[^\d]/g, '');
@@ -712,6 +740,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#E6E6E6',
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },

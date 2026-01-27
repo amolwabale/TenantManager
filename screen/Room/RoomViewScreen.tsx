@@ -18,6 +18,7 @@ import {
   TenantHistoryRecord,
   TenantRoomRecord,
 } from '../../service/TenantRoomService';
+import { fetchLatestMeterReading } from '../../service/MeterReadingService';
 
 type Props = NativeStackScreenProps<RoomStackParamList, 'RoomView'>;
 
@@ -47,6 +48,7 @@ export default function RoomViewScreen() {
 
   const [room, setRoom] = React.useState<RoomRecord | null>(null);
   const [activeTenant, setActiveTenant] = React.useState<TenantRoomRecord | null>(null);
+  const [activeMeterUnit, setActiveMeterUnit] = React.useState<number | null>(null);
   const [tenantHistory, setTenantHistory] = React.useState<TenantHistoryRecord[]>([]);
   const [loading, setLoading] = React.useState(false);
 
@@ -68,6 +70,20 @@ export default function RoomViewScreen() {
       ]);
       setActiveTenant(active);
       setTenantHistory(history || []);
+
+      if (active) {
+        try {
+          const latest = await fetchLatestMeterReading({
+            roomId,
+            tenantId: active.tenant_id,
+          });
+          setActiveMeterUnit(latest?.unit ?? null);
+        } catch {
+          setActiveMeterUnit(null);
+        }
+      } else {
+        setActiveMeterUnit(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -146,12 +162,24 @@ export default function RoomViewScreen() {
               </View>
 
               <View style={styles.occupancyMetaRow}>
-                <IconButton icon="calendar" size={18} style={styles.metaIcon} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.metaLabel}>Joining date</Text>
-                  <Text style={styles.metaValue}>
-                    {formatDate(activeTenant.joining_date)}
-                  </Text>
+                <View style={styles.metaRow}>
+                  <IconButton icon="counter" size={18} style={styles.metaIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.metaLabel}>Joining Meter reading</Text>
+                    <Text style={styles.metaValue}>
+                      {activeMeterUnit != null ? String(activeMeterUnit) : '-'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.metaRow, { marginTop: 10 }]}>
+                  <IconButton icon="calendar" size={18} style={styles.metaIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.metaLabel}>Joining date</Text>
+                    <Text style={styles.metaValue}>
+                      {formatDate(activeTenant.joining_date)}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </Surface>
@@ -258,7 +286,7 @@ const styles = StyleSheet.create({
   highlightRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 0,
   },
   highlightCard: {
     flex: 1,
@@ -343,6 +371,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#E6E6E6',
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
