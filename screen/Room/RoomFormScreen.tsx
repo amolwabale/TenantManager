@@ -35,6 +35,7 @@ import {
   TenantHistoryRecord,
 } from '../../service/TenantRoomService';
 import { fetchTenants, TenantRecord } from '../../service/tenantService';
+import { createMeterReading, deleteMeterReading } from '../../service/MeterReadingService';
 
 /* ---------------- TYPES ---------------- */
 
@@ -89,6 +90,9 @@ export default function RoomFormScreen() {
   const [joiningDate, setJoiningDate] = React.useState<Date | null>(null);
   const [dateModalOpen, setDateModalOpen] = React.useState(false);
 
+  /* METER READING */
+  const [meterReading, setMeterReading] = React.useState('');
+
   /* ---------------- LOAD ---------------- */
 
   const load = React.useCallback(async () => {
@@ -104,6 +108,7 @@ export default function RoomFormScreen() {
           setDeposit(r.deposit || '');
           setComment(r.comment || '');
         }
+        setMeterReading('');
 
         const [active, history, tenants] = await Promise.all([
           fetchActiveTenantForRoom(roomId),
@@ -120,6 +125,7 @@ export default function RoomFormScreen() {
         setTenantHistory([]);
         setSelectedTenant(null);
         setJoiningDate(null);
+        setMeterReading('');
         const tenants = await fetchTenants();
         setAllTenants(tenants);
       }
@@ -141,6 +147,14 @@ export default function RoomFormScreen() {
 
     if (selectedTenant && !joiningDate) {
       e.joiningDate = 'Joining date is required';
+    }
+
+    if (selectedTenant) {
+      if (!meterReading.trim()) {
+        e.meterReading = 'Meter reading is required';
+      } else if (!/^\d+$/.test(meterReading.trim())) {
+        e.meterReading = 'Numbers only';
+      }
     }
 
     setErrors(e);
@@ -166,11 +180,24 @@ export default function RoomFormScreen() {
       });
 
       if (!activeTenant && selectedTenant && joiningDate) {
-        await addTenantToRoom({
-          tenant_id: selectedTenant.id,
-          room_id: savedRoom.id,
-          joining_date: joiningDate.toISOString(),
+        const meterUnit = Number(meterReading);
+        const readingRow = await createMeterReading({
+          roomId: savedRoom.id,
+          tenantId: selectedTenant.id,
+          unit: meterUnit,
         });
+
+        try {
+          await addTenantToRoom({
+            tenant_id: selectedTenant.id,
+            room_id: savedRoom.id,
+            joining_date: joiningDate.toISOString(),
+          });
+        } catch (err) {
+          // rollback meter reading if mapping fails
+          await deleteMeterReading(readingRow.id);
+          throw err;
+        }
       }
 
       Alert.alert('Saved', 'Room saved successfully', [
@@ -362,6 +389,30 @@ export default function RoomFormScreen() {
                       accessibilityLabel="Remove selected tenant"
                     />
                   </Surface>
+                )}
+
+                {selectedTenant && (
+                  <>
+                    <TextInput
+                      label="Meter Reading *"
+                      value={meterReading}
+                      onChangeText={(text) => {
+                        const next = text.replace(/[^\d]/g, '');
+                        setMeterReading(next);
+                        setErrors((prev) => ({ ...prev, meterReading: '' }));
+                      }}
+                      mode="outlined"
+                      keyboardType="number-pad"
+                      left={<TextInput.Icon icon="counter" />}
+                      error={!!errors.meterReading}
+                      style={{ marginTop: 12 }}
+                    />
+                    {!!errors.meterReading && (
+                      <HelperText type="error" visible>
+                        {errors.meterReading}
+                      </HelperText>
+                    )}
+                  </>
                 )}
 
                 <Button
