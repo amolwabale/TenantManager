@@ -134,6 +134,7 @@ export default function PaymentFormScreen() {
   };
 
   const save = async () => {
+    if (saving) return; // match Tenant/Room form behavior: keep FAB colored, but prevent double submit
     if (!validate()) return;
     if (!selectedRoom || !selectedTenant) return;
 
@@ -191,14 +192,13 @@ export default function PaymentFormScreen() {
         <ScrollView
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
-          scrollEnabled={!saving}
         >
-          <View pointerEvents={saving ? 'none' : 'auto'}>
+          <View>
             {/* HERO */}
             <Surface style={styles.hero} elevation={2}>
               <Avatar.Icon
                 size={52}
-                icon="receipt-text-outline"
+                icon="file-document-outline"
                 style={{ backgroundColor: theme.colors.primaryContainer }}
                 color={theme.colors.primary}
               />
@@ -245,7 +245,6 @@ export default function PaymentFormScreen() {
                   }}
                   left={<TextInput.Icon icon="magnify" />}
                   error={!!errors.pair}
-                  editable={!saving}
                 />
                 <HelperText type="error" visible={!!errors.pair}>
                   {errors.pair || ' '}
@@ -253,21 +252,22 @@ export default function PaymentFormScreen() {
 
                 {filteredPairs.length > 0 && (
                   <Surface style={styles.dropdown} elevation={2}>
-                    {filteredPairs.slice(0, 8).map(({ room, tenant }) => (
-                      <TouchableOpacity
-                        key={`${room.id}-${tenant.id}`}
-                        style={styles.dropdownItem}
-                        onPress={() => selectPair({ room, tenant })}
-                        disabled={saving}
-                      >
-                        <Text style={{ fontWeight: '800' }}>
-                          {(room.name || '-') + ' - ' + (tenant.name || '-')}
-                        </Text>
-                        <Text style={{ color: '#666', fontSize: 12, marginTop: 2 }}>
-                          Rent: {room.rent ? formatMoney(Number(room.rent)) : '-'}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                    <View style={styles.dropdownClip}>
+                      {filteredPairs.slice(0, 8).map(({ room, tenant }) => (
+                        <TouchableOpacity
+                          key={`${room.id}-${tenant.id}`}
+                          style={styles.dropdownItem}
+                          onPress={() => selectPair({ room, tenant })}
+                        >
+                          <Text style={{ fontWeight: '800' }}>
+                            {(room.name || '-') + ' - ' + (tenant.name || '-')}
+                          </Text>
+                          <Text style={{ color: '#666', fontSize: 12, marginTop: 2 }}>
+                            Rent: {room.rent ? formatMoney(Number(room.rent)) : '-'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </Surface>
                 )}
 
@@ -290,7 +290,6 @@ export default function PaymentFormScreen() {
                 </View>
                 <IconButton
                   icon="close"
-                  disabled={saving}
                   onPress={() => {
                     setSelectedRoom(null);
                     setSelectedTenant(null);
@@ -329,7 +328,6 @@ export default function PaymentFormScreen() {
               keyboardType="number-pad"
               left={<TextInput.Icon icon="counter" />}
               error={!!errors.currentMeter}
-              editable={!saving}
             />
             <HelperText type="error" visible={!!errors.currentMeter}>
               {errors.currentMeter || ' '}
@@ -347,7 +345,6 @@ export default function PaymentFormScreen() {
               keyboardType="number-pad"
               left={<TextInput.Icon icon="cash-plus" />}
               error={!!errors.adHocAmount}
-              editable={!saving}
             />
             <HelperText type="error" visible={!!errors.adHocAmount}>
               {errors.adHocAmount || ' '}
@@ -360,7 +357,6 @@ export default function PaymentFormScreen() {
               mode="outlined"
               multiline
               left={<TextInput.Icon icon="comment-text-outline" />}
-              editable={!saving}
             />
           </Surface>
 
@@ -370,16 +366,53 @@ export default function PaymentFormScreen() {
               Summary
             </Text>
 
-            <SummaryRow label="Rent" value={formatMoney(rent)} />
-            <SummaryRow label="Water" value={formatMoney(water)} />
-            <SummaryRow
-              label={`Electricity (${diffUnits} units × ${settings.electricity_unit})`}
-              value={formatMoney(electricity)}
-            />
-            <SummaryRow label="Ad-hoc" value={formatMoney(adHoc)} />
+            <Surface
+              style={[
+                styles.summaryHero,
+                { backgroundColor: theme.colors.primaryContainer },
+              ]}
+              elevation={0}
+            >
+              <View style={styles.summaryHeroRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.summaryHeroLabel}>Total payable</Text>
+                  <Text style={styles.summaryHeroValue}>{formatMoney(total)}</Text>
+                </View>
 
-            <View style={styles.summaryDivider} />
-            <SummaryRow label="Total" value={formatMoney(total)} bold />
+                <View style={styles.statusPill}>
+                  <Text style={styles.statusPillText}>UNPAID</Text>
+                </View>
+              </View>
+
+              <Text style={styles.summaryHeroSub}>
+                {diffUnits} units used • rate {settings.electricity_unit}/unit
+              </Text>
+            </Surface>
+
+            <View style={styles.tileGrid}>
+              <SummaryTile
+                icon="home-city-outline"
+                label="Rent"
+                value={formatMoney(rent)}
+              />
+              <SummaryTile
+                icon="water-outline"
+                label="Water"
+                value={formatMoney(water)}
+              />
+              <SummaryTile
+                icon="flash-outline"
+                label="Electricity"
+                value={formatMoney(electricity)}
+                sub={`${diffUnits} × ${settings.electricity_unit}`}
+              />
+              <SummaryTile
+                icon="cash-plus"
+                label="Ad-hoc"
+                value={formatMoney(adHoc)}
+                sub={adHocComment?.trim() ? adHocComment.trim() : undefined}
+              />
+            </View>
           </Surface>
           </View>
         </ScrollView>
@@ -389,18 +422,39 @@ export default function PaymentFormScreen() {
         icon="content-save"
         style={styles.fab}
         loading={saving}
-        disabled={saving}
         onPress={save}
       />
     </>
   );
 }
 
-const SummaryRow = ({ label, value, bold }: { label: string; value: string; bold?: boolean }) => (
-  <View style={styles.summaryRow}>
-    <Text style={[styles.summaryLabel, bold && { fontWeight: '800' }]}>{label}</Text>
-    <Text style={[styles.summaryValue, bold && { fontWeight: '800' }]}>{value}</Text>
-  </View>
+const SummaryTile = ({
+  icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  sub?: string;
+}) => (
+  <Surface style={styles.summaryTile} elevation={0}>
+    <View style={styles.summaryTileTop}>
+      <Icon source={icon} size={20} color="#1A73E8" />
+      <Text style={styles.summaryTileLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+    <Text style={styles.summaryTileValue} numberOfLines={1}>
+      {value}
+    </Text>
+    {!!sub && (
+      <Text style={styles.summaryTileSub} numberOfLines={1}>
+        {sub}
+      </Text>
+    )}
+  </Surface>
 );
 
 const styles = StyleSheet.create({
@@ -428,6 +482,9 @@ const styles = StyleSheet.create({
   dropdown: {
     borderRadius: 12,
     marginBottom: 12,
+  },
+  dropdownClip: {
+    borderRadius: 12,
     overflow: 'hidden',
   },
   dropdownItem: {
@@ -464,18 +521,80 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
+  summaryHero: {
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
   },
-  summaryLabel: { color: '#555', flex: 1, marginRight: 12 },
-  summaryValue: { fontWeight: '700' },
-  summaryDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 10,
+  summaryHeroRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  summaryHeroLabel: {
+    color: '#444',
+    fontWeight: '700',
+  },
+  summaryHeroValue: {
+    marginTop: 6,
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#111827',
+  },
+  summaryHeroSub: {
+    marginTop: 8,
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#FFF5F5',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#F3B5B5',
+  },
+  statusPillText: {
+    color: '#D32F2F',
+    fontWeight: '900',
+    fontSize: 12,
+  },
+  tileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  summaryTile: {
+    width: '48%',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#FFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+  },
+  summaryTileTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  summaryTileLabel: {
+    color: '#666',
+    fontWeight: '700',
+    flex: 1,
+  },
+  summaryTileValue: {
+    marginTop: 10,
+    fontWeight: '900',
+    fontSize: 16,
+    color: '#111827',
+  },
+  summaryTileSub: {
+    marginTop: 4,
+    color: '#777',
+    fontSize: 11,
+    fontWeight: '600',
   },
 
   fab: { position: 'absolute', right: 16, bottom: 24 },
