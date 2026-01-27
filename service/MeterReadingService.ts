@@ -32,6 +32,21 @@ export async function fetchLatestMeterReading(params: {
   return data ? (data as any) : null;
 }
 
+export async function fetchLatestMeterReadingForRoom(params: {
+  roomId: number;
+}): Promise<MeterReadingLite | null> {
+  const { data, error } = await supabase
+    .from('meter_reading')
+    .select('id, unit, created_at')
+    .eq('room_id', params.roomId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? (data as any) : null;
+}
+
 export async function updateMeterReading(params: {
   id: number;
   unit: number;
