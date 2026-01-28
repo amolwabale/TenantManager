@@ -30,6 +30,26 @@ import { fetchActiveTenantsForRooms } from '../../service/TenantRoomService';
 
 const formatMoney = (n: number) => `₹${Math.round(n)}`;
 
+const formatMonth = (d: Date) =>
+  d.toLocaleDateString('en-GB', {
+    month: 'short',
+    year: 'numeric',
+  });
+
+function getPrevAndCurrMonthLabels(date?: Date) {
+  const base = date ?? new Date();
+  const currMonth = new Date(base.getFullYear(), base.getMonth(), 1);
+  const prevMonth = new Date(base.getFullYear(), base.getMonth() - 1, 1);
+
+  const currLabel = formatMonth(currMonth);
+  const prevLabel =
+    prevMonth.getFullYear() !== currMonth.getFullYear()
+      ? formatMonth(prevMonth)
+      : prevMonth.toLocaleDateString('en-GB', { month: 'short' });
+
+  return { prevLabel, currLabel };
+}
+
 export default function PaymentFormScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
@@ -104,6 +124,7 @@ export default function PaymentFormScreen() {
   const electricity = diffUnits * (settings.electricity_unit || 0);
   const adHoc = adHocAmount ? Number(adHocAmount) : 0;
   const total = rent + water + electricity + adHoc;
+  const { prevLabel, currLabel } = getPrevAndCurrMonthLabels();
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -413,6 +434,26 @@ export default function PaymentFormScreen() {
                 sub={adHocComment?.trim() ? adHocComment.trim() : undefined}
               />
             </View>
+
+            <View style={styles.meterSection}>
+              <View style={styles.meterHeaderRow}>
+                <Icon source="counter" size={18} color="#1A73E8" />
+                <Text style={styles.meterHeaderText}>Meter readings</Text>
+                <Surface style={styles.meterUnitsChip} elevation={0}>
+                  <Text style={styles.meterUnitsChipText}>{diffUnits} units</Text>
+                </Surface>
+              </View>
+
+              <View style={styles.meterGrid}>
+                <MeterTile kind="prev" title="Previous" month={prevLabel} value={previousMeter} />
+                <MeterTile
+                  kind="curr"
+                  title="Current"
+                  month={currLabel}
+                  value={currentMeter.trim().length > 0 ? currentMeterNum : null}
+                />
+              </View>
+            </View>
           </Surface>
           </View>
         </ScrollView>
@@ -454,6 +495,61 @@ const SummaryTile = ({
         {sub}
       </Text>
     )}
+  </Surface>
+);
+
+const MetaPill = ({ icon, label }: { icon: string; label: string }) => (
+  <Surface style={styles.metaPill} elevation={0}>
+    <Icon source={icon} size={16} color="#1A73E8" />
+    <Text style={styles.metaPillText} numberOfLines={1}>
+      {label}
+    </Text>
+  </Surface>
+);
+
+const MeterTile = ({
+  kind,
+  title,
+  month,
+  value,
+}: {
+  kind: 'prev' | 'curr';
+  title: string;
+  month: string;
+  value: number | null;
+}) => (
+  <Surface
+    style={[
+      styles.meterTile,
+      kind === 'curr' ? styles.meterTileCurr : styles.meterTilePrev,
+    ]}
+    elevation={0}
+  >
+    <View style={styles.meterTileTopRow}>
+      <View style={styles.meterTitleRow}>
+        <View style={styles.meterIconWrap}>
+          <Icon source="counter" size={18} color={kind === 'curr' ? '#0F766E' : '#1A73E8'} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.meterTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text
+            style={[
+              styles.meterMonthText,
+              kind === 'curr' ? styles.meterMonthTextCurr : styles.meterMonthTextPrev,
+            ]}
+            numberOfLines={1}
+          >
+            {month}
+          </Text>
+        </View>
+      </View>
+    </View>
+
+    <Text style={styles.meterValue} numberOfLines={1}>
+      {value != null ? String(value) : '-'}
+    </Text>
   </Surface>
 );
 
@@ -596,6 +692,97 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+
+  meterSection: {
+    marginTop: 12,
+  },
+  meterHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  meterHeaderText: {
+    fontWeight: '900',
+    color: '#111827',
+    flex: 1,
+  },
+  meterUnitsChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D6DEFF',
+  },
+  meterUnitsChipText: {
+    fontWeight: '900',
+    fontSize: 12,
+    color: '#1A73E8',
+  },
+  meterGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  meterTile: {
+    width: '48%',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  meterTilePrev: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+  },
+  meterTileCurr: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+  },
+  meterTileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  meterTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    flex: 1,
+  },
+  meterIconWrap: {
+    marginTop: 1,
+  },
+  meterTitle: {
+    fontWeight: '900',
+    color: '#111827',
+  },
+  meterMonthText: {
+    marginTop: 2,
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  meterMonthTextPrev: { color: '#1A73E8' },
+  meterMonthTextCurr: { color: '#0F766E' },
+  meterValue: {
+    marginTop: 10,
+    fontWeight: '900',
+    fontSize: 16,
+    color: '#111827',
+    fontVariant: ['tabular-nums'],
+  },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D6DEFF',
+    flex: 1,
+  },
+  metaPillText: { fontWeight: '800', color: '#1A73E8', fontSize: 12, flex: 1 },
 
   fab: { position: 'absolute', right: 16, bottom: 24 },
 });

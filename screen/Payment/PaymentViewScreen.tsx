@@ -1,10 +1,11 @@
 import { useFocusEffect, useRoute } from '@react-navigation/native';
 import React from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Avatar, Icon, Surface, Text, useTheme } from 'react-native-paper';
 import { fetchBillById, fetchLatestSetting, type BillRecord } from '../../service/BillService';
 import { fetchRooms } from '../../service/RoomService';
 import { fetchTenants } from '../../service/tenantService';
+import { supabase } from '../../service/SupabaseClient';
 
 const formatMoney = (n?: number | null) => `₹${Math.round(Number(n || 0))}`;
 const formatDate = (d?: string | null) =>
@@ -15,6 +16,26 @@ const formatDate = (d?: string | null) =>
         year: 'numeric',
       })
     : '-';
+
+const formatMonth = (d: Date) =>
+  d.toLocaleDateString('en-GB', {
+    month: 'short',
+    year: 'numeric',
+  });
+
+function getPrevAndCurrMonthLabels(dateString?: string | null) {
+  const billDate = dateString ? new Date(dateString) : new Date();
+  const currMonth = new Date(billDate.getFullYear(), billDate.getMonth(), 1);
+  const prevMonth = new Date(billDate.getFullYear(), billDate.getMonth() - 1, 1);
+
+  const currLabel = formatMonth(currMonth);
+  const prevLabel =
+    prevMonth.getFullYear() !== currMonth.getFullYear()
+      ? formatMonth(prevMonth)
+      : prevMonth.toLocaleDateString('en-GB', { month: 'short' });
+
+  return { prevLabel, currLabel };
+}
 
 function twoDp(n: number) {
   return Math.round(n * 100) / 100;
@@ -29,7 +50,24 @@ export default function PaymentViewScreen() {
   const [bill, setBill] = React.useState<BillRecord | null>(null);
   const [tenantName, setTenantName] = React.useState('-');
   const [roomName, setRoomName] = React.useState('-');
+  const [tenantPhotoUrl, setTenantPhotoUrl] = React.useState<string | undefined>(undefined);
   const [settings, setSettings] = React.useState<{ electricity_unit: number }>({ electricity_unit: 0 });
+
+  // same approach as Tenant/Payment list (signed URLs for private bucket)
+  const createSignedUrl = async (fullUrl?: string | null) => {
+    if (!fullUrl) return undefined;
+    const marker = '/tenant-manager/';
+    const index = fullUrl.indexOf(marker);
+    if (index === -1) return undefined;
+    const filePath = fullUrl.substring(index + marker.length);
+
+    const { data, error } = await supabase.storage
+      .from('tenant-manager')
+      .createSignedUrl(filePath, 60 * 60);
+
+    if (error) return undefined;
+    return data.signedUrl;
+  };
 
   const load = React.useCallback(async () => {
     if (!billId) {
@@ -39,6 +77,7 @@ export default function PaymentViewScreen() {
 
     try {
       setLoading(true);
+      setTenantPhotoUrl(undefined);
 
       const [b, rooms, tenants, s] = await Promise.all([
         fetchBillById(billId),
@@ -64,6 +103,13 @@ export default function PaymentViewScreen() {
 
       setRoomName(rn || '-');
       setTenantName(tn || '-');
+
+      // signed URL for tenant photo (square thumbnail in header)
+      if (b?.tenant_id != null) {
+        const t = (tenants || []).find((x: any) => x?.id === b.tenant_id);
+        const signed = await createSignedUrl((t as any)?.profile_photo_url);
+        if (signed) setTenantPhotoUrl(signed);
+      }
     } catch (e: any) {
       Alert.alert('Load Failed', e.message || 'Could not load bill');
     } finally {
@@ -110,6 +156,7 @@ export default function PaymentViewScreen() {
   const adHoc = Number(bill.ad_hoc_amount || 0);
   const total = Number(bill.total_amount || 0);
   const paid = Number(bill.paid_amount || 0);
+  const pending = Math.max(0, total - paid);
   const status = (bill.status || '-').toUpperCase();
 
   const prev = Number(bill.previous_month_meter_reading || 0);
@@ -117,16 +164,31 @@ export default function PaymentViewScreen() {
   const units = Math.max(0, curr - prev);
   const rate = units > 0 ? twoDp(electricity / units) : settings.electricity_unit || 0;
 
+  const { prevLabel, currLabel } = getPrevAndCurrMonthLabels(bill.created_at);
+
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
       {/* HERO */}
       <Surface style={styles.hero} elevation={2}>
-        <Avatar.Icon
-          size={52}
-          icon="file-document-outline"
-          style={{ backgroundColor: theme.colors.primaryContainer }}
-          color={theme.colors.primary}
-        />
+        <View
+          style={[
+            styles.heroPhotoWrap,
+            {
+              backgroundColor: theme.colors.primaryContainer,
+              borderColor: theme.colors.primary,
+            },
+          ]}
+        >
+          {tenantPhotoUrl ? (
+            <Image source={{ uri: tenantPhotoUrl }} style={styles.heroPhoto} resizeMode="cover" />
+          ) : (
+            <Icon source="account" size={28} color={theme.colors.primary} />
+          )}
+        </View>
         <View style={{ flex: 1, marginLeft: 14 }}>
           <Text style={styles.heroKicker} numberOfLines={1}>
             BILL SUMMARY
@@ -163,11 +225,8 @@ export default function PaymentViewScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.billTopLabel}>Total payable</Text>
                 <Text style={styles.billTopValue}>{formatMoney(total)}</Text>
-                <Text style={styles.billTopSub}>
-                  {units} units • rate {rate}/unit
-                </Text>
+                
               </View>
-
               <View style={styles.statusPill}>
                 <Text style={styles.statusPillText}>{status}</Text>
               </View>
@@ -191,14 +250,44 @@ export default function PaymentViewScreen() {
             />
           </View>
 
-          <View style={styles.metaRow}>
-            <MetaPill icon="counter" label={`Prev ${prev}`} />
-            <MetaPill icon="counter" label={`Curr ${curr}`} />
-            <MetaPill icon="cash" label={`Paid ${formatMoney(paid)}`} />
+          <View style={styles.meterSection}>
+            <View style={styles.meterHeaderRow}>
+              <Icon source="counter" size={18} color="#1A73E8" />
+              <Text style={styles.meterHeaderText}>Meter readings</Text>
+              <Surface style={styles.meterUnitsChip} elevation={0}>
+                <Text style={styles.meterUnitsChipText}>{units} units</Text>
+              </Surface>
+            </View>
+
+            <View style={styles.meterGrid}>
+              <MeterTile kind="prev" title="Previous" month={prevLabel} value={prev} />
+              <MeterTile kind="curr" title="Current" month={currLabel} value={curr} />
+            </View>
+
+            <View style={styles.paidRow}>
+              <MetaPill
+                icon="cash"
+                label={`Paid ${formatMoney(paid)}`}
+                color={theme.colors.primary}
+                backgroundColor={theme.colors.primaryContainer}
+                borderColor={theme.colors.primary}
+              />
+              <MetaPill
+                icon="clock-outline"
+                label={`Pending ${formatMoney(pending)}`}
+                color={pending > 0 ? theme.colors.error : undefined}
+                backgroundColor={
+                  pending > 0
+                    ? ((theme.colors as any).errorContainer ?? '#FDECEC')
+                    : undefined
+                }
+                borderColor={pending > 0 ? theme.colors.error : undefined}
+              />
+            </View>
           </View>
         </View>
       </Surface>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -231,17 +320,75 @@ const BreakdownTile = ({
   </Surface>
 );
 
-const MetaPill = ({ icon, label }: { icon: string; label: string }) => (
-  <Surface style={styles.metaPill} elevation={0}>
-    <Icon source={icon} size={16} color="#1A73E8" />
-    <Text style={styles.metaPillText} numberOfLines={1}>
+const MetaPill = ({
+  icon,
+  label,
+  color = '#1A73E8',
+  backgroundColor = '#EEF2FF',
+  borderColor = '#1A73E8',
+}: {
+  icon: string;
+  label: string;
+  color?: string;
+  backgroundColor?: string;
+  borderColor?: string;
+}) => (
+  <Surface style={[styles.metaPill, { backgroundColor, borderColor }]} elevation={0}>
+    <Icon source={icon} size={16} color={color} />
+    <Text style={[styles.metaPillText, { color }]} numberOfLines={1}>
       {label}
     </Text>
   </Surface>
 );
 
+const MeterTile = ({
+  kind,
+  title,
+  month,
+  value,
+}: {
+  kind: 'prev' | 'curr';
+  title: string;
+  month: string;
+  value: number;
+}) => (
+  <Surface
+    style={[
+      styles.meterTile,
+      kind === 'curr' ? styles.meterTileCurr : styles.meterTilePrev,
+    ]}
+    elevation={0}
+  >
+    <View style={styles.meterTileTopRow}>
+      <View style={styles.meterTitleRow}>
+        <View style={styles.meterIconWrap}>
+          <Icon source="counter" size={18} color={kind === 'curr' ? '#0F766E' : '#1A73E8'} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.meterTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text
+            style={[
+              styles.meterMonthText,
+              kind === 'curr' ? styles.meterMonthTextCurr : styles.meterMonthTextPrev,
+            ]}
+            numberOfLines={1}
+          >
+            {month}
+          </Text>
+        </View>
+      </View>
+    </View>
+
+    <Text style={styles.meterValue} numberOfLines={1}>
+      {value}
+    </Text>
+  </Surface>
+);
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#F4F6FA' },
+  container: { flexGrow: 1, padding: 16, paddingBottom: 24, backgroundColor: '#F4F6FA' },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyWrap: {
     flex: 1,
@@ -257,6 +404,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  heroPhotoWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 999,
+    overflow: 'hidden',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroPhoto: {
+    width: '100%',
+    height: '100%',
   },
   heroKicker: {
     color: '#6B7280',
@@ -371,11 +531,89 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  metaRow: {
-    flexDirection: 'row',
-    gap: 10,
+  meterSection: {
     paddingHorizontal: 14,
     paddingBottom: 14,
+    paddingTop: 2,
+  },
+  meterHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  meterHeaderText: {
+    fontWeight: '900',
+    color: '#111827',
+    flex: 1,
+  },
+  meterUnitsChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D6DEFF',
+  },
+  meterUnitsChipText: {
+    fontWeight: '900',
+    fontSize: 12,
+    color: '#1A73E8',
+  },
+  meterGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  meterTile: {
+    width: '48%',
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  meterTilePrev: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+  },
+  meterTileCurr: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+  },
+  meterTileTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  meterTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    flex: 1,
+  },
+  meterIconWrap: {
+    marginTop: 1,
+  },
+  meterTitle: {
+    fontWeight: '900',
+    color: '#111827',
+  },
+  meterMonthText: {
+    marginTop: 2,
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  meterMonthTextPrev: { color: '#1A73E8' },
+  meterMonthTextCurr: { color: '#0F766E' },
+  meterValue: {
+    marginTop: 10,
+    fontWeight: '900',
+    fontSize: 16,
+    color: '#111827',
+    fontVariant: ['tabular-nums'],
+  },
+  paidRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 10,
   },
   metaPill: {
     flexDirection: 'row',
@@ -384,11 +622,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: '#EEF2FF',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#D6DEFF',
+    borderWidth: 1,
     flex: 1,
   },
-  metaPillText: { fontWeight: '800', color: '#1A73E8', fontSize: 12, flex: 1 },
+  metaPillText: { fontWeight: '800', fontSize: 12, flex: 1 },
 });
 
