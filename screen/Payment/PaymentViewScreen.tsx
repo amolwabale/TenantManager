@@ -8,6 +8,7 @@ import {
   Dialog,
   Icon,
   IconButton,
+  ProgressBar,
   Portal,
   Surface,
   Text,
@@ -201,6 +202,7 @@ export default function PaymentViewScreen() {
   const paid = Number(bill.paid_amount || 0);
   const pending = Math.max(0, total - paid);
   const status = (bill.status || '-').toUpperCase();
+  const paidProgress = total > 0 ? Math.min(1, Math.max(0, paid / total)) : 0;
   const statusTone =
     status === 'PAID'
       ? { bg: '#ECFDF3', border: '#86EFAC', text: '#16A34A' } // green
@@ -405,9 +407,50 @@ export default function PaymentViewScreen() {
                 </TouchableRipple>
               </View>
             </View>
+
+            <Surface
+              style={[
+                styles.paymentStrip,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: (theme.colors as any).outlineVariant ?? theme.colors.outline,
+                },
+              ]}
+              elevation={0}
+            >
+              <View style={styles.paymentStripRow}>
+                <PaymentStat
+                  icon="cash"
+                  label="Paid"
+                  amount={formatMoney(paid)}
+                  color={theme.colors.primary}
+                />
+                <View
+                  style={[
+                    styles.paymentStripDivider,
+                    {
+                      backgroundColor:
+                        (theme.colors as any).outlineVariant ?? theme.colors.outline,
+                    },
+                  ]}
+                />
+                <PaymentStat
+                  icon="clock-outline"
+                  label="Pending"
+                  amount={formatMoney(pending)}
+                  color={pending > 0 ? theme.colors.error : theme.colors.primary}
+                />
+              </View>
+              <ProgressBar
+                progress={paidProgress}
+                color={pending > 0 ? theme.colors.primary : theme.colors.primary}
+                style={styles.paymentProgress}
+              />
+            </Surface>
           </Surface>
 
           <View style={styles.tileGrid}>
+            
             <BreakdownTile icon="home-city-outline" label="Rent" value={formatMoney(rent)} />
             <BreakdownTile icon="water-outline" label="Water" value={formatMoney(water)} />
             <BreakdownTile
@@ -436,27 +479,6 @@ export default function PaymentViewScreen() {
             <View style={styles.meterGrid}>
               <MeterTile kind="prev" title="Previous" month={prevLabel} value={prev} />
               <MeterTile kind="curr" title="Current" month={currLabel} value={curr} />
-            </View>
-
-            <View style={styles.paidRow}>
-              <MetaPill
-                icon="cash"
-                label={`Paid ${formatMoney(paid)}`}
-                color={theme.colors.primary}
-                backgroundColor={theme.colors.primaryContainer}
-                borderColor={theme.colors.primary}
-              />
-              <MetaPill
-                icon="clock-outline"
-                label={`Pending ${formatMoney(pending)}`}
-                color={pending > 0 ? theme.colors.error : undefined}
-                backgroundColor={
-                  pending > 0
-                    ? ((theme.colors as any).errorContainer ?? '#FDECEC')
-                    : undefined
-                }
-                borderColor={pending > 0 ? theme.colors.error : undefined}
-              />
             </View>
 
             {!!bill.paid_amount_comment?.trim() && (
@@ -611,6 +633,30 @@ const MetaPill = ({
       {label}
     </Text>
   </Surface>
+);
+
+const PaymentStat = ({
+  icon,
+  label,
+  amount,
+  color,
+}: {
+  icon: string;
+  label: string;
+  amount: string;
+  color: string;
+}) => (
+  <View style={styles.paymentStat}>
+    <View style={styles.paymentStatTop}>
+      <Icon source={icon} size={16} color={color} />
+      <Text style={styles.paymentStatLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+    <Text style={[styles.paymentStatAmount, { color }]} numberOfLines={1}>
+      {amount}
+    </Text>
+  </View>
 );
 
 const MeterTile = ({
@@ -775,7 +821,7 @@ const styles = StyleSheet.create({
   },
   billTopValue: {
     marginTop: 6,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '900',
     color: '#111827',
   },
@@ -906,14 +952,12 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontVariant: ['tabular-nums'],
   },
-  paidRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    gap: 10,
-  },
   statusCol: {
-    alignItems: 'flex-end',
-    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 10,
+    flexWrap: 'wrap',
   },
   recordChip: {
     borderRadius: 999,
@@ -930,6 +974,32 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: 12,
     letterSpacing: 0.2,
+  },
+
+  paymentStrip: {
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 10,
+  },
+  paymentStripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  paymentStripDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 34,
+    borderRadius: 1,
+  },
+  paymentStat: { flex: 1 },
+  paymentStatTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  paymentStatLabel: { color: '#6B7280', fontWeight: '800', fontSize: 11 },
+  paymentStatAmount: { marginTop: 6, fontWeight: '900', fontSize: 16, fontVariant: ['tabular-nums'] },
+  paymentProgress: {
+    marginTop: 10,
+    height: 6,
+    borderRadius: 999,
   },
   quickRow: {
     flexDirection: 'row',
