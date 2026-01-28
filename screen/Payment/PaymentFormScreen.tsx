@@ -499,10 +499,6 @@ export default function PaymentFormScreen() {
                   <Text style={styles.statusPillText}>UNPAID</Text>
                 </View>
               </View>
-
-              <Text style={styles.summaryHeroSub}>
-                {diffUnits} units used • rate {settings.electricity_unit}/unit
-              </Text>
             </Surface>
 
             <View style={styles.tileGrid}>
@@ -531,14 +527,6 @@ export default function PaymentFormScreen() {
             </View>
 
             <View style={styles.meterSection}>
-              <View style={styles.meterHeaderRow}>
-                <Icon source="counter" size={18} color="#1A73E8" />
-                <Text style={styles.meterHeaderText}>Meter readings</Text>
-                <Surface style={styles.meterUnitsChip} elevation={0}>
-                  <Text style={styles.meterUnitsChipText}>{diffUnits} units</Text>
-                </Surface>
-              </View>
-
               <View style={styles.meterGrid}>
                 <MeterTile kind="prev" title="Previous" month={prevLabel} value={previousMeter} />
                 <MeterTile
@@ -576,20 +564,20 @@ const SummaryTile = ({
   sub?: string;
 }) => (
   <Surface style={styles.summaryTile} elevation={0}>
-    <View style={styles.summaryTileTop}>
-      <Icon source={icon} size={20} color="#1A73E8" />
-      <Text style={styles.summaryTileLabel} numberOfLines={1}>
-        {label}
+    <View style={{ flex: 1 }}>
+      <View style={styles.tileTop}>
+        <Icon source={icon} size={20} color="#1A73E8" />
+        <Text style={styles.tileLabel} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+      <Text style={styles.tileValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[styles.tileSub, !sub && styles.tileSubPlaceholder]} numberOfLines={1}>
+        {sub || ' '}
       </Text>
     </View>
-    <Text style={styles.summaryTileValue} numberOfLines={1}>
-      {value}
-    </Text>
-    {!!sub && (
-      <Text style={styles.summaryTileSub} numberOfLines={1}>
-        {sub}
-      </Text>
-    )}
   </Surface>
 );
 
@@ -620,31 +608,20 @@ const MeterTile = ({
     ]}
     elevation={0}
   >
-    <View style={styles.meterTileTopRow}>
-      <View style={styles.meterTitleRow}>
-        <View style={styles.meterIconWrap}>
-          <Icon source="counter" size={18} color={kind === 'curr' ? '#0F766E' : '#1A73E8'} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.meterTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text
-            style={[
-              styles.meterMonthText,
-              kind === 'curr' ? styles.meterMonthTextCurr : styles.meterMonthTextPrev,
-            ]}
-            numberOfLines={1}
-          >
-            {month}
-          </Text>
-        </View>
+    <View style={{ flex: 1 }}>
+      <View style={styles.tileTop}>
+        <Icon source="counter" size={20} color="#1A73E8" />
+        <Text style={styles.tileLabel} numberOfLines={1}>
+          {title}
+        </Text>
       </View>
+      <Text style={styles.tileValue} numberOfLines={1}>
+        {value != null ? String(value) : '-'}
+      </Text>
+      <Text style={[styles.tileSub, !month && styles.tileSubPlaceholder]} numberOfLines={1}>
+        {month || ' '}
+      </Text>
     </View>
-
-    <Text style={styles.meterValue} numberOfLines={1}>
-      {value != null ? String(value) : '-'}
-    </Text>
   </Surface>
 );
 
@@ -764,28 +741,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E5E7EB',
+    minHeight: 92,
   },
-  summaryTileTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryTileLabel: {
-    color: '#666',
-    fontWeight: '700',
-    flex: 1,
-  },
-  summaryTileValue: {
+  tileTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tileLabel: { color: '#666', fontWeight: '800', flex: 1 },
+  tileValue: {
     marginTop: 10,
     fontWeight: '900',
     fontSize: 16,
     color: '#111827',
+    fontVariant: ['tabular-nums'],
   },
-  summaryTileSub: {
+  tileSub: {
     marginTop: 4,
     color: '#777',
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  tileSubPlaceholder: {
+    opacity: 0,
   },
 
   meterSection: {
@@ -824,6 +798,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 92,
   },
   meterTilePrev: {
     backgroundColor: '#FFFFFF',
