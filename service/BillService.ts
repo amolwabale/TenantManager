@@ -17,6 +17,7 @@ export type BillRecord = {
   ad_hoc_comment: string | null;
   paid_amount: number | null;
   status: string | null;
+  paid_amount_comment: string | null;
 };
 
 export type CreateBillPayload = {
@@ -150,6 +151,31 @@ export async function updateBill(payload: UpdateBillPayload): Promise<BillRecord
     })
     .eq('user_id', userId)
     .eq('id', payload.billId)
+    .select()
+    .maybeSingle();
+
+  if (error || !data) throw error;
+  return data as any;
+}
+
+export async function updateBillPayment(params: {
+  billId: number;
+  paidAmount: number;
+  status: 'UNPAID' | 'PARTIAL' | 'PAID';
+  paidAmountComment?: string | null;
+}): Promise<BillRecord> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('bill')
+    .update({
+      paid_amount: params.paidAmount,
+      status: params.status,
+      paid_amount_comment: params.paidAmountComment ?? undefined,
+      modified_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('id', params.billId)
     .select()
     .maybeSingle();
 

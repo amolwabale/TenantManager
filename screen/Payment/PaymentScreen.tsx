@@ -183,6 +183,10 @@ const PaymentCard = ({
           <Text style={styles.cardCaption} numberOfLines={1}>
             {formatDate(item.created_at)} • Status: {(item.status || '-').toUpperCase()}
           </Text>
+          <Text style={styles.cardCaption} numberOfLines={1}>
+            Paid {formatMoney(item.paid_amount)} • Pending{' '}
+            {formatMoney(Math.max(0, Number(item.total_amount || 0) - Number(item.paid_amount || 0)))}
+          </Text>
         </View>
       </TouchableOpacity>
     </View>

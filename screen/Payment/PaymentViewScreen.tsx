@@ -1,8 +1,21 @@
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import React from 'react';
 import { Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Avatar, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
-import { fetchBillById, fetchLatestSetting, type BillRecord } from '../../service/BillService';
+import {
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Dialog,
+  Icon,
+  IconButton,
+  Portal,
+  Surface,
+  Text,
+  TextInput,
+  TouchableRipple,
+  useTheme,
+} from 'react-native-paper';
+import { fetchBillById, fetchLatestSetting, type BillRecord, updateBillPayment } from '../../service/BillService';
 import { fetchRooms } from '../../service/RoomService';
 import { fetchTenants } from '../../service/tenantService';
 import { supabase } from '../../service/SupabaseClient';
@@ -50,6 +63,20 @@ function twoDp(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+const formatDateTime = (d: Date) =>
+  d.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+function appendPaymentComment(existing: string | null | undefined, line: string) {
+  const base = (existing || '').trim();
+  return base.length ? `${base}\n${line}` : line;
+}
+
 export default function PaymentViewScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
@@ -62,6 +89,12 @@ export default function PaymentViewScreen() {
   const [roomName, setRoomName] = React.useState('-');
   const [tenantPhotoUrl, setTenantPhotoUrl] = React.useState<string | undefined>(undefined);
   const [settings, setSettings] = React.useState<{ electricity_unit: number }>({ electricity_unit: 0 });
+
+  const [paymentDialogOpen, setPaymentDialogOpen] = React.useState(false);
+  const [paymentSaving, setPaymentSaving] = React.useState(false);
+  const [paymentAmount, setPaymentAmount] = React.useState('');
+  const [paymentMethod, setPaymentMethod] = React.useState<'CASH' | 'UPI' | 'BANK' | 'CARD' | 'OTHER'>('UPI');
+  const [paymentNote, setPaymentNote] = React.useState('');
 
   // same approach as Tenant/Payment list (signed URLs for private bucket)
   const createSignedUrl = async (fullUrl?: string | null) => {
@@ -168,6 +201,12 @@ export default function PaymentViewScreen() {
   const paid = Number(bill.paid_amount || 0);
   const pending = Math.max(0, total - paid);
   const status = (bill.status || '-').toUpperCase();
+  const statusTone =
+    status === 'PAID'
+      ? { bg: '#ECFDF3', border: '#86EFAC', text: '#16A34A' } // green
+      : status === 'PARTIAL'
+        ? { bg: '#FFF7ED', border: '#FDBA74', text: '#F97316' } // orange
+        : { bg: '#FFF5F5', border: '#FECACA', text: '#EF4444' }; // red (UNPAID/default)
 
   const prev = Number(bill.previous_month_meter_reading || 0);
   const curr = Number(bill.current_month_meter_reading || 0);
@@ -177,12 +216,62 @@ export default function PaymentViewScreen() {
   const { prevLabel, currLabel } = getPrevAndCurrMonthLabels(bill.created_at);
   const billMonth = formatMonthYear(bill.created_at);
 
+  const canEditBill = paid <= 0;
+  const canRecordPayment = pending > 0;
+
+  const openPaymentDialog = () => {
+    setPaymentAmount('');
+    setPaymentMethod('UPI');
+    setPaymentNote('');
+    setPaymentDialogOpen(true);
+  };
+
+  const amountNum = paymentAmount.trim().length ? Number(paymentAmount) : 0;
+  const isAmountValid = Number.isFinite(amountNum) && amountNum > 0 && amountNum <= pending;
+  const nextPaid = Math.min(total, paid + (isAmountValid ? amountNum : 0));
+  const nextPending = Math.max(0, total - nextPaid);
+  const nextStatus: 'UNPAID' | 'PARTIAL' | 'PAID' =
+    nextPaid <= 0 ? 'UNPAID' : nextPending <= 0 ? 'PAID' : 'PARTIAL';
+
+  const savePayment = async () => {
+    if (paymentSaving) return;
+    if (!isAmountValid) return;
+
+    try {
+      setPaymentSaving(true);
+
+      const now = new Date();
+      const note = paymentNote.trim();
+      const line = `[${formatDateTime(now)}] ${paymentMethod} received ${formatMoney(amountNum)}${
+        note ? ` • ${note}` : ''
+      } (Paid ${formatMoney(nextPaid)}, Pending ${formatMoney(nextPending)})`;
+
+      const nextComment = appendPaymentComment(bill.paid_amount_comment, line);
+
+      // Update existing bill row: paid_amount + status + paid_amount_comment
+      await updateBillPayment({
+        billId: bill.id,
+        paidAmount: nextPaid,
+        status: nextStatus,
+        paidAmountComment: nextComment,
+      });
+
+      setPaymentDialogOpen(false);
+      await load();
+    } catch (e: any) {
+      Alert.alert('Save Failed', e.message || 'Could not record payment');
+    } finally {
+      setPaymentSaving(false);
+    }
+  };
+
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
+    <>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
       {/* HERO */}
       <Surface style={styles.hero} elevation={2}>
         <View
@@ -244,7 +333,7 @@ export default function PaymentViewScreen() {
         </View>
 
         {/* Edit allowed only when paid_amount is 0 */}
-        {paid <= 0 ? (
+        {canEditBill ? (
           <IconButton
             icon="pencil"
             size={20}
@@ -274,8 +363,46 @@ export default function PaymentViewScreen() {
                 <Text style={styles.billTopValue}>{formatMoney(total)}</Text>
                 
               </View>
-              <View style={styles.statusPill}>
-                <Text style={styles.statusPillText}>{status}</Text>
+              <View style={styles.statusCol}>
+                <View
+                  style={[
+                    styles.statusPill,
+                    { backgroundColor: statusTone.bg, borderColor: statusTone.border },
+                  ]}
+                >
+                  <Text style={[styles.statusPillText, { color: statusTone.text }]}>{status}</Text>
+                </View>
+
+                <TouchableRipple
+                  onPress={openPaymentDialog}
+                  disabled={!canRecordPayment}
+                  borderless
+                  style={[
+                    styles.recordChip,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: canRecordPayment ? theme.colors.primary : theme.colors.outline,
+                      opacity: canRecordPayment ? 1 : 0.6,
+                    },
+                  ]}
+                >
+                  <View style={styles.recordChipInner}>
+                    <Icon
+                      source="cash-plus"
+                      size={16}
+                      color={canRecordPayment ? theme.colors.primary : theme.colors.outline}
+                    />
+                    <Text
+                      style={[
+                        styles.recordChipText,
+                        { color: canRecordPayment ? theme.colors.primary : theme.colors.outline },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Record
+                    </Text>
+                  </View>
+                </TouchableRipple>
               </View>
             </View>
           </Surface>
@@ -331,10 +458,108 @@ export default function PaymentViewScreen() {
                 borderColor={pending > 0 ? theme.colors.error : undefined}
               />
             </View>
+
+            {!!bill.paid_amount_comment?.trim() && (
+              <View style={styles.commentBox}>
+                <View style={styles.commentHeader}>
+                  <Icon source="note-text-outline" size={16} color={theme.colors.primary} />
+                  <Text style={styles.commentHeaderText}>Payment notes</Text>
+                </View>
+                <Text style={styles.commentText}>{bill.paid_amount_comment.trim()}</Text>
+              </View>
+            )}
           </View>
         </View>
       </Surface>
-    </ScrollView>
+      </ScrollView>
+
+      <Portal>
+        <Dialog visible={paymentDialogOpen} onDismiss={() => setPaymentDialogOpen(false)}>
+          <Dialog.Title>Record payment</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ color: '#6B7280', fontWeight: '700', marginBottom: 10 }}>
+              {tenantName} • {roomName} • Pending {formatMoney(pending)}
+            </Text>
+
+            <TextInput
+              label="Amount received"
+              mode="outlined"
+              keyboardType="number-pad"
+              value={paymentAmount}
+              onChangeText={(t) => setPaymentAmount(t.replace(/[^\d]/g, ''))}
+              left={<TextInput.Icon icon="currency-inr" />}
+              error={paymentAmount.trim().length > 0 && !isAmountValid}
+            />
+            <Text style={{ color: '#6B7280', fontWeight: '600', marginTop: 8, marginBottom: 8 }}>
+              Quick fill
+            </Text>
+            <View style={styles.quickRow}>
+              <Button
+                mode="outlined"
+                onPress={() => setPaymentAmount(String(pending))}
+                disabled={pending <= 0}
+                compact
+              >
+                Pay full ({formatMoney(pending)})
+              </Button>
+            </View>
+
+            <Text style={{ color: '#6B7280', fontWeight: '600', marginTop: 14, marginBottom: 8 }}>
+              Method
+            </Text>
+            <View style={styles.methodRow}>
+              {(['CASH', 'UPI', 'BANK', 'CARD', 'OTHER'] as const).map((m) => (
+                <Button
+                  key={m}
+                  mode={paymentMethod === m ? 'contained-tonal' : 'outlined'}
+                  onPress={() => setPaymentMethod(m)}
+                  compact
+                >
+                  {m}
+                </Button>
+              ))}
+            </View>
+
+            <TextInput
+              label="Note (optional)"
+              mode="outlined"
+              value={paymentNote}
+              onChangeText={setPaymentNote}
+              left={<TextInput.Icon icon="note-text-outline" />}
+              style={{ marginTop: 14 }}
+            />
+
+            <Surface style={[styles.previewBox, { backgroundColor: theme.colors.surfaceVariant }]} elevation={0}>
+              <View style={styles.previewRow}>
+                <Text style={styles.previewLabel}>New status</Text>
+                <Text style={styles.previewValue}>{nextStatus}</Text>
+              </View>
+              <View style={styles.previewRow}>
+                <Text style={styles.previewLabel}>Paid</Text>
+                <Text style={styles.previewValue}>{formatMoney(nextPaid)}</Text>
+              </View>
+              <View style={styles.previewRow}>
+                <Text style={styles.previewLabel}>Pending</Text>
+                <Text style={styles.previewValue}>{formatMoney(nextPending)}</Text>
+              </View>
+              {!isAmountValid && paymentAmount.trim().length > 0 && (
+                <Text style={{ marginTop: 8, color: theme.colors.error, fontWeight: '700' }}>
+                  Enter an amount between 1 and {Math.round(pending)}.
+                </Text>
+              )}
+            </Surface>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setPaymentDialogOpen(false)} disabled={paymentSaving}>
+              Cancel
+            </Button>
+            <Button onPress={savePayment} loading={paymentSaving} disabled={!isAmountValid}>
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </>
   );
 }
 
@@ -565,12 +790,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: '#FFF5F5',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F3B5B5',
   },
   statusPillText: {
-    color: '#D32F2F',
     fontWeight: '900',
     fontSize: 12,
   },
@@ -688,6 +910,74 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: 'row',
     gap: 10,
+  },
+  statusCol: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  recordChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  recordChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recordChipText: {
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  methodRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  previewBox: {
+    marginTop: 14,
+    borderRadius: 14,
+    padding: 12,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  previewLabel: { color: '#6B7280', fontWeight: '800' },
+  previewValue: { color: '#111827', fontWeight: '900' },
+
+  commentBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#F6F8FF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D6DEFF',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  commentHeaderText: {
+    fontWeight: '900',
+    color: '#111827',
+  },
+  commentText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 12,
+    lineHeight: 18,
   },
   metaPill: {
     flexDirection: 'row',
