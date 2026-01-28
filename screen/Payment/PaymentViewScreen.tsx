@@ -16,6 +16,15 @@ const formatDate = (d?: string | null) =>
         year: 'numeric',
       })
     : '-';
+const formatMonthYear = (d?: string | null) =>
+  d
+    ? new Date(d)
+        .toLocaleDateString('en-GB', {
+          month: 'short',
+          year: 'numeric',
+        })
+        .toUpperCase()
+    : '-';
 
 const formatMonth = (d: Date) =>
   d.toLocaleDateString('en-GB', {
@@ -165,6 +174,7 @@ export default function PaymentViewScreen() {
   const rate = units > 0 ? twoDp(electricity / units) : settings.electricity_unit || 0;
 
   const { prevLabel, currLabel } = getPrevAndCurrMonthLabels(bill.created_at);
+  const billMonth = formatMonthYear(bill.created_at);
 
   return (
     <ScrollView
@@ -190,9 +200,25 @@ export default function PaymentViewScreen() {
           )}
         </View>
         <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={styles.heroKicker} numberOfLines={1}>
-            BILL SUMMARY
-          </Text>
+          <View style={styles.heroKickerRow}>
+            <Text style={styles.heroKicker} numberOfLines={1}>
+              BILL SUMMARY
+            </Text>
+            <Surface
+              style={[
+                styles.heroMonthPill,
+                {
+                  backgroundColor: theme.colors.primaryContainer,
+                  borderColor: theme.colors.primary,
+                },
+              ]}
+              elevation={0}
+            >
+              <Text style={[styles.heroMonthPillText, { color: theme.colors.primary }]} numberOfLines={1}>
+                {billMonth}
+              </Text>
+            </Surface>
+          </View>
 
           <Text variant="headlineSmall" style={styles.heroTenant} numberOfLines={1}>
             {tenantName}
@@ -208,7 +234,7 @@ export default function PaymentViewScreen() {
           <View style={styles.heroMetaRow}>
             <Icon source="calendar" size={16} color="#6B7280" />
             <Text style={styles.heroMetaText} numberOfLines={1}>
-              {formatDate(bill.created_at)}
+              Issued {formatDate(bill.created_at)}
             </Text>
           </View>
         </View>
@@ -418,11 +444,28 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  heroKickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   heroKicker: {
     color: '#6B7280',
     fontWeight: '900',
     letterSpacing: 1.2,
     fontSize: 11,
+    flex: 1,
+  },
+  heroMonthPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  heroMonthPillText: {
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: 0.6,
   },
   heroTenant: {
     fontWeight: '900',
