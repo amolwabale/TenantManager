@@ -234,6 +234,13 @@ export default function PaymentViewScreen() {
   const nextPending = Math.max(0, total - nextPaid);
   const nextStatus: 'UNPAID' | 'PARTIAL' | 'PAID' =
     nextPaid <= 0 ? 'UNPAID' : nextPending <= 0 ? 'PAID' : 'PARTIAL';
+  const nextStatusTone =
+    nextStatus === 'PAID'
+      ? { bg: '#ECFDF3', border: '#86EFAC', text: '#16A34A' }
+      : nextStatus === 'PARTIAL'
+        ? { bg: '#FFF7ED', border: '#FDBA74', text: '#F97316' }
+        : { bg: '#FFF5F5', border: '#FECACA', text: '#EF4444' };
+  const nextProgress = total > 0 ? Math.min(1, Math.max(0, nextPaid / total)) : 0;
 
   const savePayment = async () => {
     if (paymentSaving) return;
@@ -494,13 +501,43 @@ export default function PaymentViewScreen() {
       </ScrollView>
 
       <Portal>
-        <Dialog visible={paymentDialogOpen} onDismiss={() => setPaymentDialogOpen(false)}>
-          <Dialog.Title>Record payment</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ color: '#6B7280', fontWeight: '700', marginBottom: 10 }}>
-              {tenantName} • {roomName} • Pending {formatMoney(pending)}
-            </Text>
+        <Dialog
+          visible={paymentDialogOpen}
+          onDismiss={() => setPaymentDialogOpen(false)}
+          style={styles.payDialog}
+        >
+          <View style={styles.payDialogHeader}>
+            <View style={styles.payDialogHeaderRow}>
+              <Surface
+                style={[
+                  styles.payDialogIconWrap,
+                  { backgroundColor: theme.colors.primaryContainer },
+                ]}
+                elevation={0}
+              >
+                <Icon source="cash-plus" size={22} color={theme.colors.primary} />
+              </Surface>
 
+              <View style={{ flex: 1 }}>
+                <Text variant="titleMedium" style={styles.payDialogTitle}>
+                  Record payment
+                </Text>
+                <Text style={styles.payDialogSub} numberOfLines={1}>
+                  {tenantName} • {roomName}
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.statusPill,
+                  { backgroundColor: statusTone.bg, borderColor: statusTone.border },
+                ]}
+              >
+                <Text style={[styles.statusPillText, { color: statusTone.text }]}>{status}</Text>
+              </View>
+            </View>
+          </View>
+          <Dialog.Content>
             <TextInput
               label="Amount received"
               mode="outlined"
@@ -510,49 +547,110 @@ export default function PaymentViewScreen() {
               left={<TextInput.Icon icon="currency-inr" />}
               error={paymentAmount.trim().length > 0 && !isAmountValid}
             />
-            <Text style={{ color: '#6B7280', fontWeight: '600', marginTop: 8, marginBottom: 8 }}>
-              Quick fill
-            </Text>
             <View style={styles.quickRow}>
-              <Button
-                mode="outlined"
-                onPress={() => setPaymentAmount(String(pending))}
-                disabled={pending <= 0}
-                compact
-              >
-                Pay full ({formatMoney(pending)})
-              </Button>
+              <Text style={styles.quickLabel}>Quick fill</Text>
+              <View style={styles.quickChipsRow}>
+                <Button
+                  mode="outlined"
+                  compact
+                  onPress={() => setPaymentAmount(String(Math.max(1, Math.round(pending * 0.25))))}
+                  disabled={pending <= 0}
+                >
+                  25%
+                </Button>
+                <Button
+                  mode="outlined"
+                  compact
+                  onPress={() => setPaymentAmount(String(Math.max(1, Math.round(pending * 0.5))))}
+                  disabled={pending <= 0}
+                >
+                  50%
+                </Button>
+                <Button
+                  mode="contained-tonal"
+                  compact
+                  onPress={() => setPaymentAmount(String(pending))}
+                  disabled={pending <= 0}
+                >
+                  Full {formatMoney(pending)}
+                </Button>
+              </View>
             </View>
 
-            <Text style={{ color: '#6B7280', fontWeight: '600', marginTop: 14, marginBottom: 8 }}>
-              Method
-            </Text>
-            <View style={styles.methodRow}>
-              {(['CASH', 'UPI', 'BANK', 'CARD', 'OTHER'] as const).map((m) => (
-                <Button
-                  key={m}
-                  mode={paymentMethod === m ? 'contained-tonal' : 'outlined'}
-                  onPress={() => setPaymentMethod(m)}
-                  compact
-                >
-                  {m}
-                </Button>
-              ))}
+            <View style={styles.methodBlock}>
+              <Text style={styles.methodLabel}>Method</Text>
+              <View style={styles.methodRow}>
+                {([
+                  { id: 'CASH', icon: 'cash' },
+                  { id: 'UPI', icon: 'qrcode-scan' },
+                  { id: 'BANK', icon: 'bank-outline' },
+                  { id: 'CARD', icon: 'credit-card-outline' },
+                  { id: 'OTHER', icon: 'dots-horizontal-circle-outline' },
+                ] as const).map((m) => {
+                  const selected = paymentMethod === (m.id as any);
+                  return (
+                    <TouchableRipple
+                      key={m.id}
+                      onPress={() => setPaymentMethod(m.id as any)}
+                      borderless
+                      style={[
+                        styles.methodChip,
+                        {
+                          backgroundColor: selected ? theme.colors.primaryContainer : theme.colors.surface,
+                          borderColor: selected
+                            ? theme.colors.primary
+                            : ((theme.colors as any).outlineVariant ?? theme.colors.outline),
+                        },
+                      ]}
+                    >
+                      <View style={styles.methodChipInner}>
+                        <Icon source={m.icon} size={16} color={selected ? theme.colors.primary : '#6B7280'} />
+                        <Text
+                          style={[
+                            styles.methodChipText,
+                            { color: selected ? theme.colors.primary : '#6B7280' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {m.id}
+                        </Text>
+                      </View>
+                    </TouchableRipple>
+                  );
+                })}
+              </View>
             </View>
 
             <TextInput
-              label="Note (optional)"
+              label="Note (will be saved in bill notes)"
               mode="outlined"
               value={paymentNote}
               onChangeText={setPaymentNote}
               left={<TextInput.Icon icon="note-text-outline" />}
+              multiline
               style={{ marginTop: 14 }}
             />
 
-            <Surface style={[styles.previewBox, { backgroundColor: theme.colors.surfaceVariant }]} elevation={0}>
-              <View style={styles.previewRow}>
-                <Text style={styles.previewLabel}>New status</Text>
-                <Text style={styles.previewValue}>{nextStatus}</Text>
+            <Surface
+              style={[
+                styles.previewBox,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: (theme.colors as any).outlineVariant ?? theme.colors.outline,
+                },
+              ]}
+              elevation={0}
+            >
+              <View style={styles.previewHeaderRow}>
+                <Text style={styles.previewHeaderText}>After saving</Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    { backgroundColor: nextStatusTone.bg, borderColor: nextStatusTone.border },
+                  ]}
+                >
+                  <Text style={[styles.statusPillText, { color: nextStatusTone.text }]}>{nextStatus}</Text>
+                </View>
               </View>
               <View style={styles.previewRow}>
                 <Text style={styles.previewLabel}>Paid</Text>
@@ -562,6 +660,7 @@ export default function PaymentViewScreen() {
                 <Text style={styles.previewLabel}>Pending</Text>
                 <Text style={styles.previewValue}>{formatMoney(nextPending)}</Text>
               </View>
+              <ProgressBar progress={nextProgress} color={theme.colors.primary} style={styles.previewProgress} />
               {!isAmountValid && paymentAmount.trim().length > 0 && (
                 <Text style={{ marginTop: 8, color: theme.colors.error, fontWeight: '700' }}>
                   Enter an amount between 1 and {Math.round(pending)}.
@@ -573,7 +672,7 @@ export default function PaymentViewScreen() {
             <Button onPress={() => setPaymentDialogOpen(false)} disabled={paymentSaving}>
               Cancel
             </Button>
-            <Button onPress={savePayment} loading={paymentSaving} disabled={!isAmountValid}>
+            <Button mode="contained" onPress={savePayment} loading={paymentSaving} disabled={!isAmountValid}>
               Save
             </Button>
           </Dialog.Actions>
@@ -889,20 +988,22 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 999,
   },
-  quickRow: {
-    flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  methodRow: {
-    flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
   previewBox: {
     marginTop: 14,
     borderRadius: 14,
     padding: 12,
+    borderWidth: 1,
+  },
+  previewHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  previewHeaderText: {
+    fontWeight: '900',
+    color: '#111827',
   },
   previewRow: {
     flexDirection: 'row',
@@ -912,6 +1013,80 @@ const styles = StyleSheet.create({
   },
   previewLabel: { color: '#6B7280', fontWeight: '800' },
   previewValue: { color: '#111827', fontWeight: '900' },
+  previewProgress: {
+    marginTop: 10,
+    height: 6,
+    borderRadius: 999,
+  },
+
+  payDialog: {
+    borderRadius: 18,
+  },
+  payDialogHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 4,
+  },
+  payDialogHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  payDialogIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  payDialogTitle: {
+    fontWeight: '900',
+    color: '#111827',
+  },
+  payDialogSub: {
+    marginTop: 2,
+    color: '#6B7280',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+
+  quickRow: {
+    marginTop: 12,
+  },
+  quickLabel: {
+    color: '#6B7280',
+    fontWeight: '800',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  quickChipsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+
+  methodBlock: {
+    marginTop: 14,
+  },
+  methodLabel: {
+    color: '#6B7280',
+    fontWeight: '800',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  methodRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  methodChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  methodChipInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  methodChipText: { fontWeight: '900', fontSize: 12, letterSpacing: 0.2 },
 
   commentBox: {
     marginTop: 12,
