@@ -12,8 +12,11 @@ import {
   ActivityIndicator,
   Avatar,
   FAB,
+  Icon,
   Surface,
   Text,
+  TouchableRipple,
+  useTheme,
 } from 'react-native-paper';
 import { fetchBills, BillRecord } from '../../service/BillService';
 import { fetchRooms } from '../../service/RoomService';
@@ -21,6 +24,14 @@ import { fetchTenants, TenantRecord } from '../../service/tenantService';
 import { supabase } from '../../service/SupabaseClient';
 
 const formatMoney = (n?: number | null) => `₹${Math.round(n || 0)}`;
+const formatMoneyCompact = (n?: number | null) => {
+  const v = Math.round(Number(n || 0));
+  const trim = (s: string) => s.replace(/\.0$/, '');
+  if (v >= 1e7) return `₹${trim((v / 1e7).toFixed(1))}Cr`;
+  if (v >= 1e5) return `₹${trim((v / 1e5).toFixed(1))}L`;
+  if (v >= 1e3) return `₹${trim((v / 1e3).toFixed(1))}k`;
+  return `₹${v}`;
+};
 const formatDate = (d?: string | null) =>
   d
     ? new Date(d).toLocaleDateString('en-GB', {
@@ -34,6 +45,7 @@ const AVATAR_SIZE = 48;
 
 export default function PaymentScreen() {
   const navigation = useNavigation<any>();
+  const theme = useTheme();
 
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -118,7 +130,9 @@ export default function PaymentScreen() {
       roomName={item.room_id != null ? roomNameById[item.room_id] : '-'}
       tenantName={item.tenant_id != null ? tenantNameById[item.tenant_id] : '-'}
       photoUrl={item.tenant_id != null ? tenantPhotoById[item.tenant_id] : undefined}
+      onRecord={() => navigation.navigate('PaymentView', { billId: item.id, openRecordPayment: true })}
       onPress={() => navigation.navigate('PaymentView', { billId: item.id })}
+      theme={theme}
     />
   );
 
@@ -154,13 +168,17 @@ const PaymentCard = ({
   roomName,
   tenantName,
   photoUrl,
+  onRecord,
   onPress,
+  theme,
 }: {
   item: BillRecord;
   roomName: string;
   tenantName: string;
   photoUrl?: string;
+  onRecord: () => void;
   onPress: () => void;
+  theme: any;
 }) => (
   <Surface style={styles.card} elevation={2}>
     <View style={styles.cardClip}>
@@ -170,23 +188,86 @@ const PaymentCard = ({
         <View style={styles.verticalDivider} />
 
         <View style={styles.cardBody}>
-          <View style={styles.titleRow}>
-            <Text variant="titleMedium" style={styles.cardTitle} numberOfLines={1}>
-              {tenantName}
-            </Text>
-            <Text style={styles.amountPill}>{formatMoney(item.total_amount)}</Text>
-          </View>
+          {(() => {
+            const total = Number(item.total_amount || 0);
+            const paid = Number(item.paid_amount || 0);
+            const pending = Math.max(0, total - paid);
+            const status = (item.status || '-').toUpperCase();
+            const statusTone =
+              status === 'PAID'
+                ? { bg: '#ECFDF3', border: '#86EFAC', text: '#16A34A' }
+                : status === 'PARTIAL'
+                  ? { bg: '#FFF7ED', border: '#FDBA74', text: '#F97316' }
+                  : { bg: '#FFF5F5', border: '#FECACA', text: '#EF4444' };
 
-          <Text style={styles.cardSubtitle} numberOfLines={1}>
-            Room: {roomName}
-          </Text>
-          <Text style={styles.cardCaption} numberOfLines={1}>
-            {formatDate(item.created_at)} • Status: {(item.status || '-').toUpperCase()}
-          </Text>
-          <Text style={styles.cardCaption} numberOfLines={1}>
-            Paid {formatMoney(item.paid_amount)} • Pending{' '}
-            {formatMoney(Math.max(0, Number(item.total_amount || 0) - Number(item.paid_amount || 0)))}
-          </Text>
+            return (
+              <>
+                <View style={styles.titleRow}>
+                  <Text variant="titleMedium" style={styles.cardTitle} numberOfLines={1}>
+                    {tenantName}
+                  </Text>
+                  <Text
+                    style={[styles.totalTopRight, { color: theme.colors.primary }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                  >
+                    {formatMoney(total)}
+                  </Text>
+                </View>
+
+                <View style={styles.metaRow}>
+                  <View style={styles.roomRow}>
+                    <Icon source="home-city-outline" size={16} color={theme.colors.primary} />
+                    <Text style={styles.roomText} numberOfLines={1}>
+                      {roomName}
+                    </Text>
+                  </View>
+                  <Text style={styles.dateText} numberOfLines={1}>
+                    {formatDate(item.created_at)}
+                  </Text>
+                </View>
+
+                <View style={styles.bottomRow}>
+                  <View style={[styles.statusPill, { backgroundColor: statusTone.bg, borderColor: statusTone.border }]}>
+                    <Text style={[styles.statusPillText, { color: statusTone.text }]} numberOfLines={1}>
+                      {status}
+                    </Text>
+                  </View>
+
+                  {status === 'PARTIAL' ? (
+                    <View style={[styles.pendingPill, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}>
+                      <Icon source="clock-outline" size={14} color="#F97316" />
+                      <Text style={[styles.pendingPillText, { color: '#F97316' }]} numberOfLines={1}>
+                        {formatMoneyCompact(pending)}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableRipple
+                    onPress={onRecord}
+                    borderless
+                    disabled={pending <= 0}
+                    style={[
+                      styles.recordChip,
+                      {
+                        borderColor: pending > 0 ? theme.colors.primary : theme.colors.outline,
+                        opacity: pending > 0 ? 1 : 0.5,
+                        backgroundColor: theme.colors.surface,
+                      },
+                    ]}
+                  >
+                    <View style={styles.recordChipInner}>
+                      <Icon source="cash-plus" size={14} color={theme.colors.primary} />
+                      <Text style={[styles.recordChipText, { color: theme.colors.primary }]} numberOfLines={1}>
+                        Record
+                      </Text>
+                    </View>
+                  </TouchableRipple>
+                </View>
+              </>
+            );
+          })()}
         </View>
       </TouchableOpacity>
     </View>
@@ -232,16 +313,50 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardTitle: { fontWeight: '700', flex: 1 },
-  cardSubtitle: { color: '#555', marginTop: 4, fontWeight: '600' },
-  cardCaption: { color: '#777', fontSize: 12, marginTop: 4, lineHeight: 16 },
-  amountPill: {
+  metaRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  roomRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  roomText: { color: '#555', fontWeight: '700', flex: 1 },
+  dateText: { color: '#777', fontSize: 12, fontWeight: '700' },
+  bottomRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusPill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: '#EEF2FF',
-    color: '#1A73E8',
-    fontWeight: '800',
-    fontSize: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  statusPillText: { fontWeight: '900', fontSize: 12 },
+  pendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: 120,
+  },
+  pendingPillText: { fontWeight: '900', fontSize: 12, fontVariant: ['tabular-nums'] },
+  recordChip: {
+    marginLeft: 'auto',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  recordChipInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  recordChipText: { fontWeight: '900', fontSize: 12, letterSpacing: 0.2 },
+  totalTopRight: {
+    fontWeight: '900',
+    fontSize: 13,
+    fontVariant: ['tabular-nums'],
+    maxWidth: 120,
+    textAlign: 'right',
   },
 
   fab: { position: 'absolute', right: 16, bottom: 24 },

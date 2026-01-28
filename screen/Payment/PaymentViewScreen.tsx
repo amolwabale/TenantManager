@@ -83,6 +83,8 @@ export default function PaymentViewScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const billId: number | undefined = route.params?.billId;
+  const openRecordPayment: boolean | undefined = route.params?.openRecordPayment;
+  const autoOpenedRef = React.useRef(false);
 
   const [loading, setLoading] = React.useState(true);
   const [bill, setBill] = React.useState<BillRecord | null>(null);
@@ -167,6 +169,28 @@ export default function PaymentViewScreen() {
     }, [load]),
   );
 
+  // ---- Record-payment auto-open (must be BEFORE early returns to keep hook order stable)
+  const totalForGate = Number(bill?.total_amount || 0);
+  const paidForGate = Number(bill?.paid_amount || 0);
+  const pendingForGate = Math.max(0, totalForGate - paidForGate);
+  const canRecordPaymentGate = !!bill && pendingForGate > 0;
+
+  const openPaymentDialog = React.useCallback(() => {
+    setPaymentAmount('');
+    setPaymentMethod('UPI');
+    setPaymentNote('');
+    setPaymentDialogOpen(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (!openRecordPayment) return;
+    if (!canRecordPaymentGate) return;
+    // open once when bill is loaded and pending > 0
+    autoOpenedRef.current = true;
+    openPaymentDialog();
+  }, [openRecordPayment, canRecordPaymentGate, bill?.id, openPaymentDialog]);
+
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -220,13 +244,6 @@ export default function PaymentViewScreen() {
 
   const canEditBill = paid <= 0;
   const canRecordPayment = pending > 0;
-
-  const openPaymentDialog = () => {
-    setPaymentAmount('');
-    setPaymentMethod('UPI');
-    setPaymentNote('');
-    setPaymentDialogOpen(true);
-  };
 
   const amountNum = paymentAmount.trim().length ? Number(paymentAmount) : 0;
   const isAmountValid = Number.isFinite(amountNum) && amountNum > 0 && amountNum <= pending;
@@ -369,7 +386,14 @@ export default function PaymentViewScreen() {
             <View style={styles.billTopRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.billTopLabel}>Total payable</Text>
-                <Text style={styles.billTopValue}>{formatMoney(total)}</Text>
+                <Text
+                  style={styles.billTopValue}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  {formatMoney(total)}
+                </Text>
                 
               </View>
               <View style={styles.statusCol}>
@@ -642,7 +666,7 @@ export default function PaymentViewScreen() {
               elevation={0}
             >
               <View style={styles.previewHeaderRow}>
-                <Text style={styles.previewHeaderText}>After saving</Text>
+                <Text style={styles.previewHeaderText}>Payment Summary</Text>
                 <View
                   style={[
                     styles.statusPill,
@@ -753,7 +777,12 @@ const PaymentStat = ({
         {label}
       </Text>
     </View>
-    <Text style={[styles.paymentStatAmount, { color }]} numberOfLines={1}>
+    <Text
+      style={[styles.paymentStatAmount, { color }]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.7}
+    >
       {amount}
     </Text>
   </View>
