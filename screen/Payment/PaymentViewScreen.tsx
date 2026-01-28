@@ -385,7 +385,7 @@ export default function PaymentViewScreen() {
           >
             <View style={styles.billTopRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.billTopLabel}>Total payable</Text>
+                <Text style={styles.billTopLabel}>Total Rent</Text>
                 <Text
                   style={styles.billTopValue}
                   numberOfLines={1}
