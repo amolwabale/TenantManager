@@ -23,7 +23,16 @@ import { fetchRooms } from '../../service/RoomService';
 import { fetchTenants, TenantRecord } from '../../service/tenantService';
 import { supabase } from '../../service/SupabaseClient';
 
-const formatMoney = (n?: number | null) => `₹${Math.round(n || 0)}`;
+const formatMoney = (n?: number | null) => {
+  const v = Math.round(Number(n || 0));
+  try {
+    // Indian grouping for readability: 12,34,567
+    return `₹${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(v)}`;
+  } catch {
+    // Fallback if Intl is unavailable
+    return `₹${String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  }
+};
 const formatMoneyCompact = (n?: number | null) => {
   const v = Math.round(Number(n || 0));
   const trim = (s: string) => s.replace(/\.0$/, '');
@@ -41,7 +50,7 @@ const formatDate = (d?: string | null) =>
       })
     : '-';
 
-const AVATAR_SIZE = 48;
+const AVATAR_SIZE = 58;
 
 export default function PaymentScreen() {
   const navigation = useNavigation<any>();
@@ -181,96 +190,94 @@ const PaymentCard = ({
   theme: any;
 }) => (
   <Surface style={styles.card} elevation={2}>
-    <View style={styles.cardClip}>
-      <TouchableOpacity style={styles.cardContent} activeOpacity={0.85} onPress={onPress}>
-        <AvatarDisplay uri={photoUrl} size={AVATAR_SIZE} />
+    <TouchableOpacity style={styles.cardContent} activeOpacity={0.85} onPress={onPress}>
+      <AvatarDisplay uri={photoUrl} size={AVATAR_SIZE} />
 
-        <View style={styles.verticalDivider} />
+      <View style={styles.cardBody}>
+        {(() => {
+          const total = Number(item.total_amount || 0);
+          const paid = Number(item.paid_amount || 0);
+          const pending = Math.max(0, total - paid);
+          const status = (item.status || '-').toUpperCase();
+          const statusTone =
+            status === 'PAID'
+              ? { bg: '#ECFDF3', border: '#86EFAC', text: '#16A34A' }
+              : status === 'PARTIAL'
+                ? { bg: '#FFF7ED', border: '#FDBA74', text: '#F97316' }
+                : { bg: '#FFF5F5', border: '#FECACA', text: '#EF4444' };
 
-        <View style={styles.cardBody}>
-          {(() => {
-            const total = Number(item.total_amount || 0);
-            const paid = Number(item.paid_amount || 0);
-            const pending = Math.max(0, total - paid);
-            const status = (item.status || '-').toUpperCase();
-            const statusTone =
-              status === 'PAID'
-                ? { bg: '#ECFDF3', border: '#86EFAC', text: '#16A34A' }
-                : status === 'PARTIAL'
-                  ? { bg: '#FFF7ED', border: '#FDBA74', text: '#F97316' }
-                  : { bg: '#FFF5F5', border: '#FECACA', text: '#EF4444' };
+          return (
+            <>
+              <View style={styles.titleRow}>
+                <Text variant="titleMedium" style={styles.cardTitle} numberOfLines={1}>
+                  {tenantName}
+                </Text>
+                <Text
+                  style={[styles.totalTopRight, { color: theme.colors.primary }]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  {formatMoney(total)}
+                </Text>
+              </View>
 
-            return (
-              <>
-                <View style={styles.titleRow}>
-                  <Text variant="titleMedium" style={styles.cardTitle} numberOfLines={1}>
-                    {tenantName}
-                  </Text>
-                  <Text
-                    style={[styles.totalTopRight, { color: theme.colors.primary }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                  >
-                    {formatMoney(total)}
-                  </Text>
-                </View>
-
-                <View style={styles.metaRow}>
+              <View style={styles.metaRow}>
+                <View style={styles.metaLeft}>
                   <View style={styles.roomRow}>
                     <Icon source="home-city-outline" size={16} color={theme.colors.primary} />
                     <Text style={styles.roomText} numberOfLines={1}>
                       {roomName}
                     </Text>
                   </View>
-                  <Text style={styles.dateText} numberOfLines={1}>
-                    {formatDate(item.created_at)}
-                  </Text>
-                </View>
-
-                <View style={styles.bottomRow}>
-                  <View style={[styles.statusPill, { backgroundColor: statusTone.bg, borderColor: statusTone.border }]}>
-                    <Text style={[styles.statusPillText, { color: statusTone.text }]} numberOfLines={1}>
-                      {status}
+                  <View style={styles.issuedRow}>
+                    <Icon source="calendar" size={14} color="#6B7280" />
+                    <Text style={styles.dateText} numberOfLines={1}>
+                      {formatDate(item.created_at)}
                     </Text>
                   </View>
-
-                  {status === 'PARTIAL' ? (
-                    <View style={[styles.pendingPill, { backgroundColor: '#FFF7ED', borderColor: '#FDBA74' }]}>
-                      <Icon source="clock-outline" size={14} color="#F97316" />
-                      <Text style={[styles.pendingPillText, { color: '#F97316' }]} numberOfLines={1}>
-                        {formatMoneyCompact(pending)}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  <TouchableRipple
-                    onPress={onRecord}
-                    borderless
-                    disabled={pending <= 0}
-                    style={[
-                      styles.recordChip,
-                      {
-                        borderColor: pending > 0 ? theme.colors.primary : theme.colors.outline,
-                        opacity: pending > 0 ? 1 : 0.5,
-                        backgroundColor: theme.colors.surface,
-                      },
-                    ]}
-                  >
-                    <View style={styles.recordChipInner}>
-                      <Icon source="cash-plus" size={14} color={theme.colors.primary} />
-                      <Text style={[styles.recordChipText, { color: theme.colors.primary }]} numberOfLines={1}>
-                        Record
-                      </Text>
-                    </View>
-                  </TouchableRipple>
                 </View>
-              </>
-            );
-          })()}
-        </View>
-      </TouchableOpacity>
-    </View>
+
+                <View style={styles.metaRight}>
+                  <View style={styles.recordStatusRow}>
+                    <View
+                      style={[styles.statusPill, { backgroundColor: statusTone.bg, borderColor: statusTone.border }]}
+                    >
+                      <Text
+                        style={[styles.statusPillText, { color: statusTone.text }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.85}
+                      >
+                        {status}
+                      </Text>
+                    </View>
+
+                    <TouchableRipple
+                      onPress={onRecord}
+                      borderless
+                      disabled={pending <= 0}
+                      style={[
+                        styles.statusActionBtn,
+                        {
+                          backgroundColor: theme.colors.primaryContainer,
+                          borderColor: theme.colors.primary,
+                          opacity: pending > 0 ? 1 : 0.4,
+                        },
+                      ]}
+                    >
+                      <View style={styles.statusActionBtnInner}>
+                        <Icon source="cash-plus" size={16} color={theme.colors.primary} />
+                      </View>
+                    </TouchableRipple>
+                  </View>
+                </View>
+              </View>
+            </>
+          );
+        })()}
+      </View>
+    </TouchableOpacity>
   </Surface>
 );
 
@@ -285,27 +292,17 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
     marginBottom: 12,
-  },
-  cardClip: {
-    flexDirection: 'row',
-    borderRadius: 16,
     overflow: 'hidden',
   },
   cardContent: {
     flex: 1,
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    alignItems: 'flex-start',
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 12,
   },
-  verticalDivider: {
-    width: 1.5,
-    height: 65,
-    backgroundColor: '#cccccc',
-    borderRadius: 1,
-    marginHorizontal: 12,
-  },
-  cardBody: { flex: 1, paddingTop: 2 },
+  cardBody: { flex: 1 },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -316,41 +313,33 @@ const styles = StyleSheet.create({
   metaRow: {
     marginTop: 6,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
   },
+  metaLeft: { flex: 1, minWidth: 0 },
   roomRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   roomText: { color: '#555', fontWeight: '700', flex: 1 },
+  issuedRow: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 },
   dateText: { color: '#777', fontSize: 12, fontWeight: '700' },
-  bottomRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metaRight: { alignItems: 'flex-end', justifyContent: 'flex-start' },
+  recordStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' },
   statusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    width: 86,
+    height: 28,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-  },
-  statusPillText: { fontWeight: '900', fontSize: 12 },
-  pendingPill: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    maxWidth: 120,
+    justifyContent: 'center',
   },
-  pendingPillText: { fontWeight: '900', fontSize: 12, fontVariant: ['tabular-nums'] },
-  recordChip: {
-    marginLeft: 'auto',
+  statusPillText: { fontWeight: '900', fontSize: 11, letterSpacing: 0.4, textAlign: 'center' },
+  statusActionBtn: {
+    width: 28,
+    height: 28,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
   },
-  recordChipInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  recordChipText: { fontWeight: '900', fontSize: 12, letterSpacing: 0.2 },
+  statusActionBtnInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   totalTopRight: {
     fontWeight: '900',
     fontSize: 13,
