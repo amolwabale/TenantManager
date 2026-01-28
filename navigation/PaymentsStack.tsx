@@ -22,7 +22,9 @@ export default function PaymentsStack() {
       <Stack.Screen
         name="PaymentForm"
         component={PaymentFormScreen}
-        options={{ title: 'Add Payment' }}
+        options={({ route }: any) => ({
+          title: route?.params?.billId ? 'Edit Payment' : 'Add Payment',
+        })}
       />
     </Stack.Navigator>
   );

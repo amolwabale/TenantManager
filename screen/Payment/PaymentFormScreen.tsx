@@ -1,4 +1,4 @@
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import React from 'react';
 import {
   Alert,
@@ -22,10 +22,21 @@ import {
   TextInput,
   useTheme,
 } from 'react-native-paper';
-import { createBill, fetchLatestSetting } from '../../service/BillService';
-import { createMeterReading, fetchLatestMeterReadingForRoom } from '../../service/MeterReadingService';
+import {
+  createBill,
+  fetchBillById,
+  fetchLatestBillForRoom,
+  fetchLatestSetting,
+  type BillRecord,
+  updateBill,
+} from '../../service/BillService';
+import {
+  createMeterReading,
+  fetchLatestMeterReadingForRoom,
+  updateMeterReading,
+} from '../../service/MeterReadingService';
 import { fetchRooms, RoomRecord } from '../../service/RoomService';
-import { TenantRecord } from '../../service/tenantService';
+import { fetchTenants, TenantRecord } from '../../service/tenantService';
 import { fetchActiveTenantsForRooms } from '../../service/TenantRoomService';
 
 const formatMoney = (n: number) => `₹${Math.round(n)}`;
@@ -53,9 +64,13 @@ function getPrevAndCurrMonthLabels(date?: Date) {
 export default function PaymentFormScreen() {
   const theme = useTheme();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const billId: number | undefined = route.params?.billId;
+  const isEdit = !!billId;
 
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [editingBill, setEditingBill] = React.useState<BillRecord | null>(null);
 
   const [rooms, setRooms] = React.useState<RoomRecord[]>([]);
   const [assignments, setAssignments] = React.useState<
@@ -80,7 +95,12 @@ export default function PaymentFormScreen() {
   const load = React.useCallback(async () => {
     try {
       setLoading(true);
-      const [r, s] = await Promise.all([fetchRooms(), fetchLatestSetting()]);
+      const [r, s, t, b] = await Promise.all([
+        fetchRooms(),
+        fetchLatestSetting(),
+        fetchTenants(),
+        isEdit && billId ? fetchBillById(billId) : Promise.resolve(null),
+      ]);
       setRooms(r || []);
       setSettings(s);
 
@@ -96,12 +116,45 @@ export default function PaymentFormScreen() {
       });
 
       setAssignments(pairs);
+
+      if (isEdit) {
+        if (!b) throw new Error('Bill not found');
+
+        const alreadyPaid = Number(b.paid_amount || 0) > 0;
+        if (alreadyPaid) {
+          Alert.alert('Not allowed', 'You can edit a bill only when paid amount is 0.', [
+            { text: 'OK', onPress: () => navigation.goBack() },
+          ]);
+          return;
+        }
+
+        setEditingBill(b);
+
+        const room = (r || []).find((x) => x.id === b.room_id) || null;
+        const tenant = (t || []).find((x) => x.id === b.tenant_id) || null;
+
+        if (!room || !tenant) {
+          throw new Error('Could not load room/tenant for this bill');
+        }
+
+        setSelectedRoom(room);
+        setSelectedTenant(tenant);
+        setPairQuery('');
+        setErrors({});
+
+        setPreviousMeter(Number(b.previous_month_meter_reading || 0));
+        setCurrentMeter(String(Number(b.current_month_meter_reading || 0)));
+        setAdHocAmount(b.ad_hoc_amount != null ? String(Number(b.ad_hoc_amount || 0)) : '');
+        setAdHocComment(b.ad_hoc_comment || '');
+      } else {
+        setEditingBill(null);
+      }
     } catch (e: any) {
       Alert.alert('Load Failed', e.message || 'Could not load payment form');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [billId, isEdit]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -165,6 +218,46 @@ export default function PaymentFormScreen() {
       const prev = previousMeter;
       const curr = Number(currentMeter);
 
+      if (isEdit && billId) {
+        const paidAmount = editingBill?.paid_amount != null ? Number(editingBill.paid_amount) : 0;
+        const status = editingBill?.status ? String(editingBill.status) : 'UNPAID';
+
+        await updateBill({
+          billId,
+          tenantId: selectedTenant.id,
+          roomId: selectedRoom.id,
+          rent,
+          water,
+          previousMeter: prev,
+          currentMeter: curr,
+          electricity,
+          totalAmount: total,
+          adHocAmount: adHoc,
+          adHocComment,
+          paidAmount,
+          status,
+        });
+
+        // If this is the latest bill for this room, sync the latest meter reading row
+        // so next month's "previous reading" stays correct.
+        try {
+          const latestBill = await fetchLatestBillForRoom(selectedRoom.id);
+          if (latestBill?.id === billId) {
+            const latestMr = await fetchLatestMeterReadingForRoom({ roomId: selectedRoom.id });
+            if (latestMr?.id != null) {
+              await updateMeterReading({ id: latestMr.id, unit: curr });
+            }
+          }
+        } catch {
+          // non-blocking: bill is updated; meter sync is best-effort
+        }
+
+        Alert.alert('Updated', 'Payment updated successfully', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
+
       // 1) Create bill
       await createBill({
         tenantId: selectedTenant.id,
@@ -225,10 +318,10 @@ export default function PaymentFormScreen() {
               />
               <View style={{ marginLeft: 14 }}>
                 <Text variant="titleLarge" style={{ fontWeight: '800' }}>
-                  Add Payment
+                  {isEdit ? 'Edit Payment' : 'Add Payment'}
                 </Text>
                 <Text style={{ color: '#666', marginTop: 2 }}>
-                  Capture rent & utilities
+                  {isEdit ? 'Update this bill' : 'Capture rent & utilities'}
                 </Text>
               </View>
             </Surface>
@@ -309,16 +402,18 @@ export default function PaymentFormScreen() {
                     Rent {selectedRoom.rent ? formatMoney(Number(selectedRoom.rent)) : '-'}
                   </Text>
                 </View>
-                <IconButton
-                  icon="close"
-                  onPress={() => {
-                    setSelectedRoom(null);
-                    setSelectedTenant(null);
-                    setPairQuery('');
-                    setPreviousMeter(0);
-                    setCurrentMeter('');
-                  }}
-                />
+                {!isEdit && (
+                  <IconButton
+                    icon="close"
+                    onPress={() => {
+                      setSelectedRoom(null);
+                      setSelectedTenant(null);
+                      setPairQuery('');
+                      setPreviousMeter(0);
+                      setCurrentMeter('');
+                    }}
+                  />
+                )}
               </Surface>
             )}
           </Surface>

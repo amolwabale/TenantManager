@@ -1,7 +1,7 @@
-import { useFocusEffect, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import React from 'react';
 import { Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Avatar, Icon, Surface, Text, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Icon, IconButton, Surface, Text, useTheme } from 'react-native-paper';
 import { fetchBillById, fetchLatestSetting, type BillRecord } from '../../service/BillService';
 import { fetchRooms } from '../../service/RoomService';
 import { fetchTenants } from '../../service/tenantService';
@@ -52,6 +52,7 @@ function twoDp(n: number) {
 
 export default function PaymentViewScreen() {
   const theme = useTheme();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const billId: number | undefined = route.params?.billId;
 
@@ -214,7 +215,10 @@ export default function PaymentViewScreen() {
               ]}
               elevation={0}
             >
-              <Text style={[styles.heroMonthPillText, { color: theme.colors.primary }]} numberOfLines={1}>
+              <Text
+                style={[styles.heroMonthPillText, { color: theme.colors.primary }]}
+                numberOfLines={1}
+              >
                 {billMonth}
               </Text>
             </Surface>
@@ -238,6 +242,23 @@ export default function PaymentViewScreen() {
             </Text>
           </View>
         </View>
+
+        {/* Edit allowed only when paid_amount is 0 */}
+        {paid <= 0 ? (
+          <IconButton
+            icon="pencil"
+            size={20}
+            onPress={() => navigation.navigate('PaymentForm', { billId: bill.id })}
+            iconColor={theme.colors.primary}
+            style={[
+              styles.heroEditBtn,
+              {
+                backgroundColor: theme.colors.primaryContainer,
+                borderColor: theme.colors.primary,
+              },
+            ]}
+          />
+        ) : null}
       </Surface>
 
       {/* BILL PREVIEW (no-scroll layout) */}
@@ -430,6 +451,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+    position: 'relative',
+  },
+  heroEditBtn: {
+    position: 'absolute',
+    right: 18,
+    bottom: 18,
+    margin: 0,
+    borderWidth: 1,
+    zIndex: 10,
+    elevation: 10,
   },
   heroPhotoWrap: {
     width: 76,

@@ -24,5 +24,5 @@ export type RoomStackParamList = {
 export type PaymentStackParamList = {
   PaymentList: undefined;
   PaymentView: { billId: number };
-  PaymentForm: undefined;
+  PaymentForm: { billId?: number } | undefined;
 };

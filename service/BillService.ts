@@ -34,6 +34,22 @@ export type CreateBillPayload = {
   status?: string;
 };
 
+export type UpdateBillPayload = {
+  billId: number;
+  tenantId: number;
+  roomId: number;
+  rent: number;
+  water: number;
+  previousMeter: number;
+  currentMeter: number;
+  electricity: number;
+  totalAmount: number;
+  adHocAmount: number;
+  adHocComment?: string;
+  paidAmount: number;
+  status: string;
+};
+
 const getCurrentUserId = async () => {
   const { data, error } = await supabase.auth.getUser();
   if (error) throw error;
@@ -68,6 +84,22 @@ export async function fetchBillById(billId: number): Promise<BillRecord | null> 
   return (data || null) as any;
 }
 
+export async function fetchLatestBillForRoom(roomId: number): Promise<Pick<BillRecord, 'id' | 'created_at'> | null> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('bill')
+    .select('id, created_at')
+    .eq('user_id', userId)
+    .eq('room_id', roomId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data || null) as any;
+}
+
 export async function createBill(payload: CreateBillPayload): Promise<BillRecord> {
   const userId = await getCurrentUserId();
 
@@ -89,6 +121,35 @@ export async function createBill(payload: CreateBillPayload): Promise<BillRecord
       status: payload.status || 'UNPAID',
       modified_at: null,
     })
+    .select()
+    .maybeSingle();
+
+  if (error || !data) throw error;
+  return data as any;
+}
+
+export async function updateBill(payload: UpdateBillPayload): Promise<BillRecord> {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('bill')
+    .update({
+      tenant_id: payload.tenantId,
+      room_id: payload.roomId,
+      rent: payload.rent,
+      water: payload.water,
+      previous_month_meter_reading: payload.previousMeter,
+      current_month_meter_reading: payload.currentMeter,
+      electricity: payload.electricity,
+      total_amount: payload.totalAmount,
+      ad_hoc_amount: payload.adHocAmount,
+      ad_hoc_comment: payload.adHocComment || null,
+      paid_amount: payload.paidAmount,
+      status: payload.status,
+      modified_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('id', payload.billId)
     .select()
     .maybeSingle();
 
